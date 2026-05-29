@@ -18,11 +18,13 @@ r2_vision/
 ├── requirements.txt        ← Python dependencies (+ openvino)
 ├── models/
 │   ├── yolonew_openvino_model/ ← Task 1: weapon model (OpenVINO IR — committed)
-│   ├── cube.pt             ← Task 2: cube detection (auto-export → IR)
-│   ├── martial.pt          ← Task 3: (ยังไม่มี → abstract)
+│   ├── cube_openvino_model/    ← Task 2+3: cube model (OpenVINO IR — committed)
 │   └── centroid_config.txt ← weapon centroid offset + filter thresholds (tuned)
-├── weapon_detection/       ← standalone reference repo (gitignored, not committed)
+├── weapon_detection/       ← standalone weapon reference repo (gitignored)
 │   └── weapon_detection_vino.py     ← original standalone script
+├── Cube-Detection/         ← standalone cube reference repo (gitignored)
+│   ├── grid_detection.py            ← original 3×3 grid occupancy script
+│   └── best.pt                      ← cube weights (source of cube IR)
 └── ui/                     ← Flask Mission Control UI
     ├── app.py              ← Flask entry point
     ├── api/                ← REST API endpoints
@@ -44,7 +46,7 @@ r2_vision/
 ## ความต้องการ
 
 ```bash
-pip install -r requirements.txt   # pyrealsense2 ultralytics opencv-python numpy openvino onnx onnxruntime pyyaml
+pip install -r requirements.txt   # pyrealsense2 ultralytics opencv-python numpy openvino onnx onnxruntime pyyaml scipy
 ```
 
 ROS2 Humble (สำหรับ yolo_node.py และ vision_bridge_node.py):
@@ -77,9 +79,12 @@ python3 camera_test.py
 | State | Processor | Model | Output |
 |-------|-----------|-------|--------|
 | `WEAPON_CLUB` | `WeaponProcessor` | weapon (OpenVINO IR) | **String JSON** — mm coords + placement index |
-| `MEIHUA_FOREST_EXECUTION` | `SimpleBestProcessor` | `cube.pt` → IR | `PoseStamped` — pixel error + depth |
-| `MARTIAL_ART_PLACEMENT` | `AbstractProcessor` | — (ยังไม่มี) | abstract (ไม่ publish) |
+| `MEIHUA_FOREST_EXECUTION` | `SimpleBestProcessor` | cube (OpenVINO IR) | `PoseStamped` — pixel error + depth (เป้าใน forest) |
+| `MARTIAL_ART_PLACEMENT` | `GridProcessor` | cube (OpenVINO IR) | **String JSON** — 3×3 grid EMPTY/FULL (arena) |
 
+> ทั้ง forest (task2) และ grid (task3) ใช้ **cube model เดียวกัน** (`blue_cube`/`red_cube`).
+> forest = หา cube ที่ดีที่สุด → pixel error; grid = หาตาราง 3×3 แล้วเช็คว่าแต่ละช่องว่าง/มี cube.
+>
 > ทุก model โหลดเป็น **OpenVINO IR**. ถ้าใส่ `.pt`/`.onnx` จะ auto-convert เป็น IR
 > ครั้งแรก (cache ไว้ข้างไฟล์ต้นทาง) แล้วโหลด IR ตรงๆ ครั้งถัดไป.
 > Task ไหนไม่มี model → ตกเป็น `AbstractProcessor` อัตโนมัติ.
@@ -104,8 +109,8 @@ python3 yolo_node.py --ros-args \
 แก้ใน `yolo_node.py` บรรทัดนี้:
 ```python
 MODEL_WEAPON  = os.path.join(MODELS_DIR, 'yolonew_openvino_model')
-MODEL_MEIHUA  = os.path.join(MODELS_DIR, 'cube.pt')
-MODEL_MARTIAL = os.path.join(MODELS_DIR, 'martial.pt')
+MODEL_MEIHUA  = os.path.join(MODELS_DIR, 'cube_openvino_model')   # forest cube
+MODEL_MARTIAL = os.path.join(MODELS_DIR, 'cube_openvino_model')   # grid (same model)
 ```
 
 ### Topics ที่ publish
@@ -113,8 +118,8 @@ MODEL_MARTIAL = os.path.join(MODELS_DIR, 'martial.pt')
 | Topic | Type | เมื่อไร |
 |-------|------|---------|
 | `/vision/task1_target` | **String JSON** | WEAPON_CLUB — รายการ detection ทั้งหมด (mm + index) |
-| `/vision/task2_target` | PoseStamped | MEIHUA_FOREST_EXECUTION + detect cube |
-| `/vision/task3_target` | — | MARTIAL — abstract, ยังไม่ publish |
+| `/vision/task2_target` | PoseStamped | MEIHUA_FOREST_EXECUTION + detect cube ใน forest |
+| `/vision/task3_target` | **String JSON** | MARTIAL_ART_PLACEMENT — 3×3 grid occupancy |
 
 **Format `/vision/task1_target` (WeaponProcessor):**
 ```json
@@ -140,9 +145,28 @@ position.z = depth ที่จุดกึ่งกลาง bbox    (หน่
 frame_id   = 'base_link'
 ```
 
-> ⚠️ Task 1 เปลี่ยนเป็น **mm + placement index** (JSON) — ไม่ใช่ pixel error อีกแล้ว
-> state machine ฝั่ง WEAPON_CLUB ต้องอ่าน JSON แทน PoseStamped.
-> Task 2 ยังเป็น pixel error เหมือนเดิม (tolerance=20px, gain=0.001).
+**Format `/vision/task3_target` (GridProcessor — 3×3 grid occupancy):**
+```json
+{
+  "task": "MARTIAL_ART_PLACEMENT",
+  "stamp": 1234567890,
+  "grid_found": true,
+  "bbox": [gx, gy, gw, gh],
+  "grid": [["EMPTY","FULL","EMPTY"],
+           ["EMPTY","EMPTY","EMPTY"],
+           ["EMPTY","EMPTY","FULL"]],
+  "cells": [
+    {"row":0,"col":0,"index":0,"status":"EMPTY","center_px":[220,140],"z_mm":1000}
+  ]
+}
+```
+- `grid` = ตาราง 3×3 row-major, `"EMPTY"` (ช่องว่าง) หรือ `"FULL"` (มี cube)
+- `cells[].index` = 0–8 (row*3+col), `center_px` = จุดกึ่งกลางช่อง, `z_mm` = depth ที่ช่องนั้น
+- ถ้าหาตารางไม่เจอ → `grid_found=false`, `grid`/`cells` ว่าง
+
+> ⚠️ Task 1 (mm + index JSON) และ Task 3 (grid JSON) ไม่ใช่ PoseStamped —
+> state machine ต้องอ่าน JSON. Task 2 ยังเป็น pixel error เหมือนเดิม
+> (tolerance=20px, gain=0.001).
 
 ### Topics ที่ subscribe
 
@@ -250,11 +274,10 @@ cd ~/vision/R2-ABU && ./stop_all.sh
 
 ## 6. Class names ในแต่ละ model
 
-| Model | Format | Classes |
-|-------|--------|---------|
-| `yolonew_openvino_model/` | OpenVINO IR | `weapondetect`, `fist`, `hand`, **`spearhead`** |
-| `cube.pt` | .pt → IR (auto) | `blue_cube`, `red_cube` |
-| `martial.pt` | — (ยังไม่มี) | — |
+| Model | Format | Classes | ใช้ใน |
+|-------|--------|---------|-------|
+| `yolonew_openvino_model/` | OpenVINO IR | `weapondetect`, `fist`, `hand`, **`spearhead`** | Task 1 (weapon) |
+| `cube_openvino_model/` | OpenVINO IR | `blue_cube`, `red_cube` | Task 2 (forest) + Task 3 (grid) |
 
 ---
 

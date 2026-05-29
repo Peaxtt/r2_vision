@@ -1,0 +1,25 @@
+description: Ultralytics YOLO11n model trained on dataset3/data.yaml
+author: Ultralytics
+date: '2026-05-29T20:26:52.914132'
+version: 8.4.56
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 640
+- 640
+names:
+  0: blue_cube
+  1: red_cube
+args:
+  data: null
+  batch: 1
+  fraction: 1.0
+  half: false
+  int8: false
+  dynamic: false
+  nms: false
+channels: 3
+end2end: false

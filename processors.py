@@ -380,6 +380,206 @@ class SimpleBestProcessor(TaskProcessor):
         pub.publish(msg)
 
 
+# ── MARTIAL_ART_PLACEMENT: 3×3 grid occupancy via cube detection ─────────────
+
+class GridProcessor(TaskProcessor):
+    """Ports Cube-Detection/grid_detection.py into a ROS2 processor.
+
+    Locates a 3×3 grid in the colour frame (adaptive threshold → morphological
+    H/V line detection → projection-profile peak finding), then marks each of
+    the 9 cells EMPTY/FULL by testing whether a detected cube centre lands in
+    it.  Cube detections come from the YOLO results the node already ran with
+    the cube model — no second inference here.
+
+    Output: String JSON on the task topic with the 3×3 status table plus each
+    cell's centre pixel and depth (mm), so the robot can aim at an empty cell.
+    """
+
+    CFG = {
+        'ADAPTIVE_BLOCK': 31,
+        'ADAPTIVE_C':     10,
+        'H_LINE_MIN_LEN': 40,
+        'V_LINE_MIN_LEN': 40,
+        'PEAK_HEIGHT':    0.2,
+        'COLOR_EMPTY':    (0, 220, 0),
+        'COLOR_FULL':     (0, 0, 220),
+        'COLOR_GRID':     (0, 220, 220),
+    }
+
+    def __init__(self, node, state, topic):
+        super().__init__(node, state)
+        self.topic = topic
+
+    # -- grid localisation --------------------------------------------------
+
+    def _detect_grid_region(self, gray):
+        c = self.CFG
+        adaptive = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV, c['ADAPTIVE_BLOCK'], c['ADAPTIVE_C'])
+        h_kern = cv2.getStructuringElement(cv2.MORPH_RECT, (c['H_LINE_MIN_LEN'], 1))
+        v_kern = cv2.getStructuringElement(cv2.MORPH_RECT, (1, c['V_LINE_MIN_LEN']))
+        h_lines = cv2.morphologyEx(adaptive, cv2.MORPH_OPEN, h_kern)
+        v_lines = cv2.morphologyEx(adaptive, cv2.MORPH_OPEN, v_kern)
+        combined = cv2.add(h_lines, v_lines)
+
+        contours, _ = cv2.findContours(
+            combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None, None
+        largest = max(contours, key=cv2.contourArea)
+        if cv2.contourArea(largest) < 5000:
+            return None, None
+
+        gx, gy, gw, gh = cv2.boundingRect(largest)
+        m = 5
+        gx, gy = max(0, gx - m), max(0, gy - m)
+        gw = min(gray.shape[1] - gx, gw + 2 * m)
+        gh = min(gray.shape[0] - gy, gh + 2 * m)
+        return (gx, gy, gw, gh), combined
+
+    def _find_grid_lines(self, line_img, gx, gy, gw, gh):
+        from scipy.signal import find_peaks
+
+        crop = line_img[gy:gy + gh, gx:gx + gw]
+        vproj = crop.sum(axis=0).astype(float)
+        hproj = crop.sum(axis=1).astype(float)
+        vproj /= (vproj.max() + 1e-9)
+        hproj /= (hproj.max() + 1e-9)
+
+        vpeaks, _ = find_peaks(vproj, height=self.CFG['PEAK_HEIGHT'],
+                               distance=max(1, gw // 8))
+        hpeaks, _ = find_peaks(hproj, height=self.CFG['PEAK_HEIGHT'],
+                               distance=max(1, gh // 8))
+
+        def cluster(peaks):
+            if len(peaks) == 0:
+                return []
+            peaks = sorted(peaks)
+            groups = [[peaks[0]]]
+            for p in peaks[1:]:
+                if p - groups[-1][-1] < 20:
+                    groups[-1].append(p)
+                else:
+                    groups.append([p])
+            return [int(np.mean(g)) for g in groups]
+
+        def pick4(lines):
+            n = len(lines)
+            if n >= 4:
+                step = n // 3
+                return [lines[0], lines[step], lines[2 * step], lines[-1]]
+            return None
+
+        return pick4(cluster(vpeaks)), pick4(cluster(hpeaks))
+
+    # -- cube centres from the YOLO results the node already ran ------------
+
+    def _cube_centers(self, results):
+        pts = []
+        for r in results:
+            if r.boxes is None:
+                continue
+            for box in r.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                pts.append((int((x1 + x2) / 2), int((y1 + y2) / 2)))
+        return pts
+
+    def _depth_mm(self, depth, cx, cy):
+        h_f, w_f = depth.shape[:2]
+        md = self.node.get_parameter('max_depth_mm').value
+        pad = depth[max(0, cy - 3):min(h_f, cy + 4), max(0, cx - 3):min(w_f, cx + 4)]
+        val = pad[(pad > 0) & (pad <= md)]
+        return int(np.median(val)) if val.size > 0 else None
+
+    # -- main ---------------------------------------------------------------
+
+    def process(self, results, color, depth, display, intr):
+        gray = cv2.cvtColor(color, cv2.COLOR_BGR2GRAY)
+        bbox, line_img = self._detect_grid_region(gray)
+        if bbox is None:
+            self._publish(False, None, [], [])
+            cv2.putText(display, 'GRID: not detected', (8, 46),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 220), 2)
+            return
+
+        gx, gy, gw, gh = bbox
+        vlines, hlines = self._find_grid_lines(line_img, gx, gy, gw, gh)
+        if vlines is None or hlines is None:
+            self._publish(False, bbox, [], [])
+            self._draw_bbox(display, bbox)
+            return
+
+        cubes = self._cube_centers(results)
+        grid, cells = [], []
+        for row in range(3):
+            row_status = []
+            for col in range(3):
+                y1, y2 = hlines[row], hlines[row + 1]
+                x1, x2 = vlines[col], vlines[col + 1]
+                pad_x, pad_y = (x2 - x1) // 100, (y2 - y1) // 100
+                cx1, cx2 = x1 + pad_x, x2 - pad_x
+                cy1, cy2 = y1 + pad_y, y2 - pad_y
+
+                status = 'EMPTY'
+                for cx, cy in cubes:
+                    if (gx + cx1 <= cx <= gx + cx2) and (gy + cy1 <= cy <= gy + cy2):
+                        status = 'FULL'
+                        break
+
+                ccx = gx + (cx1 + cx2) // 2
+                ccy = gy + (cy1 + cy2) // 2
+                row_status.append(status)
+                cells.append({
+                    'row': row, 'col': col, 'index': row * 3 + col,
+                    'status': status, 'center_px': [ccx, ccy],
+                    'z_mm': self._depth_mm(depth, ccx, ccy),
+                })
+            grid.append(row_status)
+
+        self._publish(True, bbox, grid, cells)
+        self._draw(display, bbox, vlines, hlines, cells, cubes)
+
+    # -- drawing ------------------------------------------------------------
+
+    def _draw_bbox(self, display, bbox):
+        gx, gy, gw, gh = bbox
+        cv2.rectangle(display, (gx, gy), (gx + gw, gy + gh), self.CFG['COLOR_GRID'], 2)
+
+    def _draw(self, display, bbox, vlines, hlines, cells, cubes):
+        gx, gy, gw, gh = bbox
+        for x in vlines:
+            cv2.line(display, (gx + x, gy), (gx + x, gy + gh), self.CFG['COLOR_GRID'], 2)
+        for y in hlines:
+            cv2.line(display, (gx, gy + y), (gx + gw, gy + y), self.CFG['COLOR_GRID'], 2)
+        self._draw_bbox(display, bbox)
+        for c in cells:
+            col = self.CFG['COLOR_EMPTY'] if c['status'] == 'EMPTY' else self.CFG['COLOR_FULL']
+            x, y = c['center_px']
+            cv2.putText(display, c['status'][0], (x - 10, y + 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, col, 2)
+        for cx, cy in cubes:
+            cv2.circle(display, (cx, cy), 5, (0, 255, 0), -1)
+        # Row summary
+        for r, row in enumerate([c for c in [cells[i:i + 3] for i in range(0, 9, 3)]]):
+            txt = f"Row {r+1}: " + "  ".join(f"[{x['status'][0]}]" for x in row)
+            cv2.putText(display, txt, (10, 46 + r * 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+
+    def _publish(self, found, bbox, grid, cells):
+        pub = self.node.get_publisher(self.topic, String, reliable=False)
+        msg = String()
+        msg.data = json.dumps({
+            'task': self.state,
+            'stamp': self.node.get_clock().now().nanoseconds,
+            'grid_found': found,
+            'bbox': list(bbox) if bbox else None,
+            'grid': grid,
+            'cells': cells,
+        })
+        pub.publish(msg)
+
+
 # ── No-model placeholder ─────────────────────────────────────────────────────
 
 class AbstractProcessor(TaskProcessor):

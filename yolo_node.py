@@ -41,7 +41,7 @@ import numpy as np
 import pyrealsense2 as rs
 
 from model_loader import load_model
-from processors import WeaponProcessor, SimpleBestProcessor, AbstractProcessor
+from processors import WeaponProcessor, SimpleBestProcessor, GridProcessor
 
 # ── QoS ───────────────────────────────────────────────────────────────────────
 RT_QOS = QoSProfile(
@@ -63,9 +63,10 @@ HERE       = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(HERE, 'models')
 # Weapon: pre-converted OpenVINO IR, committed under models/.
 MODEL_WEAPON  = os.path.join(MODELS_DIR, 'yolonew_openvino_model')
-# Others: .pt/.onnx are auto-exported to OpenVINO IR on first load (cached).
-MODEL_MEIHUA  = os.path.join(MODELS_DIR, 'cube.pt')
-MODEL_MARTIAL = os.path.join(MODELS_DIR, 'martial.pt')
+# Cube (blue_cube/red_cube) — shared by the forest (task2) and grid (task3)
+# tasks. Committed as OpenVINO IR. .pt/.onnx sources auto-export on first load.
+MODEL_MEIHUA  = os.path.join(MODELS_DIR, 'cube_openvino_model')
+MODEL_MARTIAL = os.path.join(MODELS_DIR, 'cube_openvino_model')
 CENTROID_CFG  = os.path.join(MODELS_DIR, 'centroid_config.txt')
 
 YOLO_FPS   = 5    # YOLO inference rate cap
@@ -153,8 +154,8 @@ class VisionNode(Node):
             'MEIHUA_FOREST_EXECUTION': SimpleBestProcessor(
                 self, 'MEIHUA_FOREST_EXECUTION', '/vision/task2_target',
                 'target_meihua'),
-            'MARTIAL_ART_PLACEMENT': AbstractProcessor(
-                self, 'MARTIAL_ART_PLACEMENT'),
+            'MARTIAL_ART_PLACEMENT': GridProcessor(
+                self, 'MARTIAL_ART_PLACEMENT', '/vision/task3_target'),
         }
 
         # Subscribers
