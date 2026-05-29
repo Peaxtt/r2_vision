@@ -56,6 +56,82 @@ source /opt/ros/humble/setup.bash
 
 ---
 
+## ⚡ ตัวอย่างคำสั่ง (Quick Reference)
+
+> ทุกคำสั่งของ ROS node ต้อง `source /opt/ros/humble/setup.bash` ก่อน
+
+### ทดสอบบน laptop ด้วย webcam (ไม่มี RealSense / ไม่มี depth)
+```bash
+# Task 1 — weapon (spearhead / fist / hand)
+python3 yolo_node.py --ros-args -p camera:=webcam -p force_state:=WEAPON_CLUB
+
+# Task 2 — cube ใน forest
+python3 yolo_node.py --ros-args -p camera:=webcam -p force_state:=MEIHUA_FOREST_EXECUTION
+
+# Task 3 — 3×3 grid occupancy (arena)
+python3 yolo_node.py --ros-args -p camera:=webcam -p force_state:=MARTIAL_ART_PLACEMENT
+
+# เลือก webcam ตัวอื่น (index 1) หรือเล่นจากไฟล์วิดีโอ
+python3 yolo_node.py --ros-args -p camera:=1            -p force_state:=WEAPON_CLUB
+python3 yolo_node.py --ros-args -p camera:=clip.mp4     -p force_state:=MARTIAL_ART_PLACEMENT
+```
+
+### รันบนหุ่น (RealSense, ตาม state machine จริง)
+```bash
+# Terminal 1 — Flask UI (เปิด http://localhost:5000)
+./start_abu_vision.sh
+
+# Terminal 2 — vision node (เจ้าของกล้อง RealSense)
+source /opt/ros/humble/setup.bash
+python3 yolo_node.py --ros-args -p rotate:=270 -p device:=CPU
+
+# Terminal 3 — bridge node (Flask UI ↔ ROS2 state machine)
+source /opt/ros/humble/setup.bash
+python3 vision_bridge_node.py
+
+# ปิดทุกอย่าง
+./stop_all.sh
+```
+
+### จำลอง state machine โดยไม่มีหุ่น (สั่ง macro_state เอง)
+```bash
+# สลับไป Task 1
+ros2 topic pub -1 /system_status std_msgs/msg/String \
+  '{data: "{\"macro_state\": \"WEAPON_CLUB\"}"}'
+
+# สลับไป Task 3 (grid)
+ros2 topic pub -1 /system_status std_msgs/msg/String \
+  '{data: "{\"macro_state\": \"MARTIAL_ART_PLACEMENT\"}"}'
+
+# กลับ IDLE (หยุด inference)
+ros2 topic pub -1 /system_status std_msgs/msg/String \
+  '{data: "{\"macro_state\": \"IDLE\"}"}'
+```
+> sub-state เช่น `WEAPON_CLUB_SETUP` ก็ใช้ได้ — node จับ prefix ให้เป็น `WEAPON_CLUB` อัตโนมัติ
+
+### ดู output
+```bash
+ros2 topic echo /vision/task1_target   # weapon  — String JSON (mm + placement index)
+ros2 topic echo /vision/task2_target   # forest  — PoseStamped (pixel error + depth)
+ros2 topic echo /vision/task3_target   # grid    — String JSON (3×3 EMPTY/FULL)
+ros2 topic list | grep vision
+```
+
+### Parameters ที่ใช้บ่อย
+| Param | Default | ความหมาย |
+|-------|---------|----------|
+| `camera` | `realsense` | `realsense` / `webcam` / index `0`,`1` / path วิดีโอ |
+| `force_state` | `''` | บังคับ task ไม่ต้องมี `/system_status` |
+| `rotate` | `0` | หมุนภาพตามการติดตั้งกล้อง (0/90/180/270) |
+| `device` | `CPU` | OpenVINO: `CPU` / `GPU` / `AUTO` |
+| `conf` | `0.50` | confidence threshold |
+| `grid_use_depth` | `true` | task3: ใช้ depth ยืนยันช่อง FULL |
+| `target_meihua` | `''` | กรอง class ใน forest (`blue_cube`/`red_cube`/`''`=ทุก class) |
+
+> กด `Q` หรือ `ESC` ในหน้าต่าง OpenCV เพื่อออก
+
+---
+
 ## 1. ทดสอบกล้องโดดๆ
 
 **รันก่อนเสมอ** เพื่อยืนยันว่ากล้องใช้ได้
