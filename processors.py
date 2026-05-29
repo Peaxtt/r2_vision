@@ -383,95 +383,105 @@ class SimpleBestProcessor(TaskProcessor):
 # ── MARTIAL_ART_PLACEMENT: 3×3 grid occupancy via cube detection ─────────────
 
 class GridProcessor(TaskProcessor):
-    """Ports Cube-Detection/grid_detection.py into a ROS2 processor.
+    """3×3 grid occupancy — rotation- and perspective-robust.
 
-    Locates a 3×3 grid in the colour frame (adaptive threshold → morphological
-    H/V line detection → projection-profile peak finding), then marks each of
-    the 9 cells EMPTY/FULL by testing whether a detected cube centre lands in
-    it.  Cube detections come from the YOLO results the node already ran with
-    the cube model — no second inference here.
+    Pipeline (replaces the axis-aligned morphology/projection approach that
+    only worked for an upright grid):
 
-    Output: String JSON on the task topic with the 3×3 status table plus each
-    cell's centre pixel and depth (mm), so the robot can aim at an empty cell.
+      1. Localise the grid as a QUADRILATERAL — adaptive threshold → largest
+         square-ish contour → 4-corner approxPolyDP, with a rotation-agnostic
+         minAreaRect fallback.  Works at any in-plane rotation and tolerates
+         mild perspective.
+      2. Warp to a canonical square via homography and subdivide evenly into
+         3×3 cells — no peak finding, no horizontal/vertical assumption.
+      3. Decide EMPTY/FULL per cell from TWO independent signals:
+           • cube — a detected cube centre (from the node's YOLO results)
+             projects into the cell through the homography.
+           • depth — the cell's centre region holds valid depth near the board
+             plane.  An empty tic-tac-toe hole sees far background (invalid /
+             beyond max_depth); a cube fills the hole at ~board depth.
+         Cell is FULL if EITHER fires (depth catches cubes YOLO misses and
+         vice-versa).  Depth can be disabled via the `grid_use_depth` param.
+
+    Output: String JSON with the 3×3 status table, the 4 grid corners, and per
+    cell {status, center_px, z_mm, cube, depth} so the robot can aim at an
+    empty cell.
     """
 
-    CFG = {
-        'ADAPTIVE_BLOCK': 31,
-        'ADAPTIVE_C':     10,
-        'H_LINE_MIN_LEN': 40,
-        'V_LINE_MIN_LEN': 40,
-        'PEAK_HEIGHT':    0.2,
-        'COLOR_EMPTY':    (0, 220, 0),
-        'COLOR_FULL':     (0, 0, 220),
-        'COLOR_GRID':     (0, 220, 220),
-    }
+    CANON      = 300       # canonical warped grid size (px), divisible by 3
+    CELL_PAD   = 0.18      # inner fraction trimmed from each cell for sampling
+    MIN_AREA   = 0.02      # grid contour must cover ≥ this fraction of frame
+    MAX_ASPECT = 2.0       # reject contours far from square
+    MIN_FILL   = 0.35      # depth: min valid-pixel fraction to call a cell full
+    DEPTH_TOL  = 200       # depth: mm a full cell may sit behind the board plane
+    ADAPTIVE_BLOCK = 31
+    ADAPTIVE_C     = 10
+
+    COLOR_EMPTY = (0, 220, 0)
+    COLOR_FULL  = (0, 0, 220)
+    COLOR_GRID  = (0, 220, 220)
 
     def __init__(self, node, state, topic):
         super().__init__(node, state)
         self.topic = topic
 
-    # -- grid localisation --------------------------------------------------
+    # -- grid localisation (rotation-robust) --------------------------------
 
-    def _detect_grid_region(self, gray):
-        c = self.CFG
-        adaptive = cv2.adaptiveThreshold(
+    @staticmethod
+    def _order_corners(pts):
+        """Return 4 corners in clockwise order starting top-left.
+
+        Sorts by angle around the centroid (robust at any rotation — unlike the
+        sum/diff trick, which collapses two corners into one for a 45° diamond
+        and yields a singular homography), forces clockwise winding to match
+        the canonical destination, then rolls the start to the top-left corner.
+        """
+        pts = np.asarray(pts, dtype=np.float32).reshape(4, 2)
+        c = pts.mean(axis=0)
+        pts = pts[np.argsort(np.arctan2(pts[:, 1] - c[1], pts[:, 0] - c[0]))]
+        # Shoelace (image coords, y-down): < 0 ⇒ counter-clockwise ⇒ flip.
+        area = sum(pts[i, 0] * pts[(i + 1) % 4, 1] - pts[(i + 1) % 4, 0] * pts[i, 1]
+                   for i in range(4))
+        if area < 0:
+            pts = pts[::-1]
+        start = int(np.argmin(pts.sum(axis=1)))   # top-left = min(x+y)
+        return np.roll(pts, -start, axis=0).astype(np.float32)
+
+    def _find_grid_quad(self, color):
+        gray = cv2.cvtColor(color, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (5, 5), 0)
+        th = cv2.adaptiveThreshold(
             gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY_INV, c['ADAPTIVE_BLOCK'], c['ADAPTIVE_C'])
-        h_kern = cv2.getStructuringElement(cv2.MORPH_RECT, (c['H_LINE_MIN_LEN'], 1))
-        v_kern = cv2.getStructuringElement(cv2.MORPH_RECT, (1, c['V_LINE_MIN_LEN']))
-        h_lines = cv2.morphologyEx(adaptive, cv2.MORPH_OPEN, h_kern)
-        v_lines = cv2.morphologyEx(adaptive, cv2.MORPH_OPEN, v_kern)
-        combined = cv2.add(h_lines, v_lines)
+            cv2.THRESH_BINARY_INV, self.ADAPTIVE_BLOCK, self.ADAPTIVE_C)
+        th = cv2.morphologyEx(
+            th, cv2.MORPH_CLOSE,
+            cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)))
 
         contours, _ = cv2.findContours(
-            combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
-            return None, None
-        largest = max(contours, key=cv2.contourArea)
-        if cv2.contourArea(largest) < 5000:
-            return None, None
-
-        gx, gy, gw, gh = cv2.boundingRect(largest)
-        m = 5
-        gx, gy = max(0, gx - m), max(0, gy - m)
-        gw = min(gray.shape[1] - gx, gw + 2 * m)
-        gh = min(gray.shape[0] - gy, gh + 2 * m)
-        return (gx, gy, gw, gh), combined
-
-    def _find_grid_lines(self, line_img, gx, gy, gw, gh):
-        from scipy.signal import find_peaks
-
-        crop = line_img[gy:gy + gh, gx:gx + gw]
-        vproj = crop.sum(axis=0).astype(float)
-        hproj = crop.sum(axis=1).astype(float)
-        vproj /= (vproj.max() + 1e-9)
-        hproj /= (hproj.max() + 1e-9)
-
-        vpeaks, _ = find_peaks(vproj, height=self.CFG['PEAK_HEIGHT'],
-                               distance=max(1, gw // 8))
-        hpeaks, _ = find_peaks(hproj, height=self.CFG['PEAK_HEIGHT'],
-                               distance=max(1, gh // 8))
-
-        def cluster(peaks):
-            if len(peaks) == 0:
-                return []
-            peaks = sorted(peaks)
-            groups = [[peaks[0]]]
-            for p in peaks[1:]:
-                if p - groups[-1][-1] < 20:
-                    groups[-1].append(p)
-                else:
-                    groups.append([p])
-            return [int(np.mean(g)) for g in groups]
-
-        def pick4(lines):
-            n = len(lines)
-            if n >= 4:
-                step = n // 3
-                return [lines[0], lines[step], lines[2 * step], lines[-1]]
             return None
 
-        return pick4(cluster(vpeaks)), pick4(cluster(hpeaks))
+        h, w = gray.shape
+        min_area = self.MIN_AREA * h * w
+        best, best_area = None, 0.0
+        for c in contours:
+            area = cv2.contourArea(c)
+            if area < min_area or area <= best_area:
+                continue
+            # squareness gate via the rotated bounding rect
+            (_, _), (rw, rh), _ = cv2.minAreaRect(c)
+            if min(rw, rh) < 1 or max(rw, rh) / min(rw, rh) > self.MAX_ASPECT:
+                continue
+            peri = cv2.arcLength(c, True)
+            approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+            if len(approx) == 4 and cv2.isContourConvex(approx):
+                quad = approx.reshape(4, 2).astype(np.float32)
+            else:
+                quad = cv2.boxPoints(cv2.minAreaRect(c))  # rotation-robust fallback
+            best, best_area = quad, area
+
+        return self._order_corners(best) if best is not None else None
 
     # -- cube centres from the YOLO results the node already ran ------------
 
@@ -482,98 +492,145 @@ class GridProcessor(TaskProcessor):
                 continue
             for box in r.boxes:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                pts.append((int((x1 + x2) / 2), int((y1 + y2) / 2)))
+                pts.append((float((x1 + x2) / 2), float((y1 + y2) / 2)))
         return pts
 
     def _depth_mm(self, depth, cx, cy):
         h_f, w_f = depth.shape[:2]
+        cx, cy = int(cx), int(cy)
         md = self.node.get_parameter('max_depth_mm').value
         pad = depth[max(0, cy - 3):min(h_f, cy + 4), max(0, cx - 3):min(w_f, cx + 4)]
         val = pad[(pad > 0) & (pad <= md)]
         return int(np.median(val)) if val.size > 0 else None
 
+    def _use_depth(self):
+        try:
+            return bool(self.node.get_parameter('grid_use_depth').value)
+        except Exception:
+            return True
+
     # -- main ---------------------------------------------------------------
 
     def process(self, results, color, depth, display, intr):
-        gray = cv2.cvtColor(color, cv2.COLOR_BGR2GRAY)
-        bbox, line_img = self._detect_grid_region(gray)
-        if bbox is None:
+        quad = self._find_grid_quad(color)
+        if quad is None:
             self._publish(False, None, [], [])
             cv2.putText(display, 'GRID: not detected', (8, 46),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 220), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, self.COLOR_FULL, 2)
             return
 
-        gx, gy, gw, gh = bbox
-        vlines, hlines = self._find_grid_lines(line_img, gx, gy, gw, gh)
-        if vlines is None or hlines is None:
-            self._publish(False, bbox, [], [])
-            self._draw_bbox(display, bbox)
-            return
+        S, cell = self.CANON, self.CANON // 3
+        dst = np.float32([[0, 0], [S, 0], [S, S], [0, S]])
+        H = cv2.getPerspectiveTransform(quad, dst)
+        Hinv = np.linalg.inv(H)
 
+        # Cube centres → which canonical cell they land in.
         cubes = self._cube_centers(results)
+        cube_cells = set()
+        if cubes:
+            uv = cv2.perspectiveTransform(
+                np.float32(cubes).reshape(-1, 1, 2), H).reshape(-1, 2)
+            for u, v in uv:
+                if 0 <= u < S and 0 <= v < S:
+                    cube_cells.add((int(v // cell), int(u // cell)))
+
+        # Depth, warped into the same canonical frame.
+        use_depth = self._use_depth()
+        md = self.node.get_parameter('max_depth_mm').value
+        warped_d, plane = None, None
+        if use_depth:
+            warped_d = cv2.warpPerspective(
+                depth, H, (S, S), flags=cv2.INTER_NEAREST)
+            allv = warped_d[(warped_d > 0) & (warped_d <= md)]
+            plane = float(np.median(allv)) if allv.size else None
+
         grid, cells = [], []
         for row in range(3):
             row_status = []
             for col in range(3):
-                y1, y2 = hlines[row], hlines[row + 1]
-                x1, x2 = vlines[col], vlines[col + 1]
-                pad_x, pad_y = (x2 - x1) // 100, (y2 - y1) // 100
-                cx1, cx2 = x1 + pad_x, x2 - pad_x
-                cy1, cy2 = y1 + pad_y, y2 - pad_y
+                full_cube = (row, col) in cube_cells
 
-                status = 'EMPTY'
-                for cx, cy in cubes:
-                    if (gx + cx1 <= cx <= gx + cx2) and (gy + cy1 <= cy <= gy + cy2):
-                        status = 'FULL'
-                        break
+                full_depth, vf, med = False, 0.0, None
+                if use_depth and warped_d is not None:
+                    pad = int(cell * self.CELL_PAD)
+                    y0, x0 = row * cell + pad, col * cell + pad
+                    patch = warped_d[y0:row * cell + cell - pad,
+                                     x0:col * cell + cell - pad]
+                    valid = patch[(patch > 0) & (patch <= md)]
+                    vf = valid.size / max(1, patch.size)
+                    if valid.size:
+                        med = float(np.median(valid))
+                    if (plane is not None and med is not None
+                            and vf >= self.MIN_FILL and med <= plane + self.DEPTH_TOL):
+                        full_depth = True
 
-                ccx = gx + (cx1 + cx2) // 2
-                ccy = gy + (cy1 + cy2) // 2
+                status = 'FULL' if (full_cube or full_depth) else 'EMPTY'
+
+                # Cell centre back-projected to the image for aiming.
+                ic = cv2.perspectiveTransform(
+                    np.float32([[[col * cell + cell / 2,
+                                  row * cell + cell / 2]]]), Hinv).reshape(2)
+                icx, icy = int(ic[0]), int(ic[1])
+
                 row_status.append(status)
                 cells.append({
                     'row': row, 'col': col, 'index': row * 3 + col,
-                    'status': status, 'center_px': [ccx, ccy],
-                    'z_mm': self._depth_mm(depth, ccx, ccy),
+                    'status': status, 'center_px': [icx, icy],
+                    'z_mm': self._depth_mm(depth, icx, icy),
+                    'cube': bool(full_cube), 'depth': bool(full_depth),
                 })
             grid.append(row_status)
 
-        self._publish(True, bbox, grid, cells)
-        self._draw(display, bbox, vlines, hlines, cells, cubes)
+        self._publish(True, quad, grid, cells)
+        self._draw(display, quad, Hinv, cells, cubes)
 
     # -- drawing ------------------------------------------------------------
 
-    def _draw_bbox(self, display, bbox):
-        gx, gy, gw, gh = bbox
-        cv2.rectangle(display, (gx, gy), (gx + gw, gy + gh), self.CFG['COLOR_GRID'], 2)
+    def _canon_to_img(self, pts, Hinv):
+        return cv2.perspectiveTransform(
+            np.float32(pts).reshape(-1, 1, 2), Hinv).reshape(-1, 2)
 
-    def _draw(self, display, bbox, vlines, hlines, cells, cubes):
-        gx, gy, gw, gh = bbox
-        for x in vlines:
-            cv2.line(display, (gx + x, gy), (gx + x, gy + gh), self.CFG['COLOR_GRID'], 2)
-        for y in hlines:
-            cv2.line(display, (gx, gy + y), (gx + gw, gy + y), self.CFG['COLOR_GRID'], 2)
-        self._draw_bbox(display, bbox)
+    def _draw(self, display, quad, Hinv, cells, cubes):
+        S, cell = self.CANON, self.CANON // 3
+        # Outer quad + inner cell dividers, warped back onto the image.
+        canon_lines = [([0, 0], [S, 0]), ([S, 0], [S, S]),
+                       ([S, S], [0, S]), ([0, S], [0, 0])]
+        for k in (1, 2):
+            canon_lines.append(([k * cell, 0], [k * cell, S]))   # vertical
+            canon_lines.append(([0, k * cell], [S, k * cell]))   # horizontal
+        for a, b in canon_lines:
+            p, q = self._canon_to_img([a, b], Hinv).astype(int)
+            cv2.line(display, tuple(p), tuple(q), self.COLOR_GRID, 2)
+
         for c in cells:
-            col = self.CFG['COLOR_EMPTY'] if c['status'] == 'EMPTY' else self.CFG['COLOR_FULL']
+            col = self.COLOR_EMPTY if c['status'] == 'EMPTY' else self.COLOR_FULL
             x, y = c['center_px']
             cv2.putText(display, c['status'][0], (x - 10, y + 8),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, col, 2)
         for cx, cy in cubes:
-            cv2.circle(display, (cx, cy), 5, (0, 255, 0), -1)
-        # Row summary
-        for r, row in enumerate([c for c in [cells[i:i + 3] for i in range(0, 9, 3)]]):
+            cv2.circle(display, (int(cx), int(cy)), 5, (0, 255, 0), -1)
+
+        for r in range(3):
+            row = cells[r * 3:r * 3 + 3]
             txt = f"Row {r+1}: " + "  ".join(f"[{x['status'][0]}]" for x in row)
             cv2.putText(display, txt, (10, 46 + r * 20),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
 
-    def _publish(self, found, bbox, grid, cells):
+    def _publish(self, found, quad, grid, cells):
+        corners = [[int(x), int(y)] for x, y in quad] if quad is not None else None
+        bbox = None
+        if quad is not None:
+            xs = [p[0] for p in corners]
+            ys = [p[1] for p in corners]
+            bbox = [min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)]
         pub = self.node.get_publisher(self.topic, String, reliable=False)
         msg = String()
         msg.data = json.dumps({
             'task': self.state,
             'stamp': self.node.get_clock().now().nanoseconds,
             'grid_found': found,
-            'bbox': list(bbox) if bbox else None,
+            'corners': corners,   # 4 ordered [x,y]: TL,TR,BR,BL (rotated-safe)
+            'bbox': bbox,         # axis-aligned bound of corners (compat)
             'grid': grid,
             'cells': cells,
         })

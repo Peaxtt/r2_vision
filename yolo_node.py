@@ -112,6 +112,7 @@ class VisionNode(Node):
         self.declare_parameter('rotate',         0)        # 0/90/180/270 clockwise
         self.declare_parameter('target_weapon',  'spearhead')
         self.declare_parameter('target_meihua',  '')      # '' = ทุก class
+        self.declare_parameter('grid_use_depth',  True)    # grid: depth-confirm cells
         self.declare_parameter('cam_width',      CAM_W)
         self.declare_parameter('cam_height',     CAM_H)
         self.declare_parameter('cam_fps',        CAM_FPS)

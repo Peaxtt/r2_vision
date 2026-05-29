@@ -46,7 +46,7 @@ r2_vision/
 ## ความต้องการ
 
 ```bash
-pip install -r requirements.txt   # pyrealsense2 ultralytics opencv-python numpy openvino onnx onnxruntime pyyaml scipy
+pip install -r requirements.txt   # pyrealsense2 ultralytics opencv-python numpy openvino onnx onnxruntime pyyaml
 ```
 
 ROS2 Humble (สำหรับ yolo_node.py และ vision_bridge_node.py):
@@ -102,7 +102,8 @@ python3 yolo_node.py --ros-args \
   -p device:=CPU \        # OpenVINO device: CPU / GPU / AUTO
   -p rotate:=270 \        # หมุนภาพตามการติดตั้งกล้อง (0/90/180/270)
   -p imgsz:=640 \
-  -p conf:=0.5
+  -p conf:=0.5 \
+  -p grid_use_depth:=true # task3 grid: ใช้ depth ยืนยันช่อง FULL ด้วย (default true)
 ```
 
 ### Model paths
@@ -151,18 +152,31 @@ frame_id   = 'base_link'
   "task": "MARTIAL_ART_PLACEMENT",
   "stamp": 1234567890,
   "grid_found": true,
+  "corners": [[156,195],[363,76],[483,284],[275,403]],
   "bbox": [gx, gy, gw, gh],
   "grid": [["EMPTY","FULL","EMPTY"],
            ["EMPTY","EMPTY","EMPTY"],
            ["EMPTY","EMPTY","FULL"]],
   "cells": [
-    {"row":0,"col":0,"index":0,"status":"EMPTY","center_px":[220,140],"z_mm":1000}
+    {"row":0,"col":0,"index":0,"status":"EMPTY",
+     "center_px":[220,140],"z_mm":1000,"cube":false,"depth":false}
   ]
 }
 ```
+- `corners` = มุมตาราง 4 จุด เรียง TL,TR,BR,BL (รองรับตารางเอียง/หมุน)
+- `bbox` = กรอบสี่เหลี่ยมแนวแกนครอบ corners (ไว้ compat)
 - `grid` = ตาราง 3×3 row-major, `"EMPTY"` (ช่องว่าง) หรือ `"FULL"` (มี cube)
-- `cells[].index` = 0–8 (row*3+col), `center_px` = จุดกึ่งกลางช่อง, `z_mm` = depth ที่ช่องนั้น
+- `cells[].index` = 0–8 (row*3+col), `center_px` = จุดกึ่งกลางช่อง (back-project จาก homography),
+  `z_mm` = depth ที่ช่องนั้น, `cube`/`depth` = สัญญาณไหนตัดสินว่า FULL
 - ถ้าหาตารางไม่เจอ → `grid_found=false`, `grid`/`cells` ว่าง
+
+> **Robust กับตารางหมุน:** หา grid เป็น quadrilateral (contour + minAreaRect fallback)
+> แล้ว warp ด้วย homography เป็นตาราง canonical 3×3 — ไม่ยึดแกนนอน/ตั้ง.
+> ช่อง FULL ตัดสินจาก 2 สัญญาณ (OR): cube ที่ project เข้าช่อง **หรือ** depth ที่ช่อง
+> นั้นมีค่าใกล้ระนาบกระดาน (รูว่างจะเห็น background ไกล/เกิน max_depth = invalid).
+> ปิด depth ได้ด้วย `-p grid_use_depth:=false`.
+> ⚠️ ตารางสี่เหลี่ยมไม่มีจุดอ้างอิงทิศ → (row,col) กำหนดได้แค่ตามความสมมาตร 4 ทิศ
+> ของตาราง; **ความว่าง/เต็มถูกเสมอ** แต่ป้าย row/col อาจหมุนตามตาราง.
 
 > ⚠️ Task 1 (mm + index JSON) และ Task 3 (grid JSON) ไม่ใช่ PoseStamped —
 > state machine ต้องอ่าน JSON. Task 2 ยังเป็น pixel error เหมือนเดิม
