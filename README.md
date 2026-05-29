@@ -11,13 +11,29 @@ r2_vision/
 ├── camera_test.py          ← ทดสอบกล้องโดดๆ (ไม่ต้องมี ROS)
 ├── yolo_node.py            ← YOLO detection + ROS2 publisher (ไฟล์หลัก)
 ├── vision_bridge_node.py   ← เชื่อม Flask UI ↔ ROS2 state machine
-└── models/
-    ├── weapon.onnx         ← Task 1: spearhead detection
-    ├── cube.pt             ← Task 2: cube detection
-    └── martial.pt          ← Task 3: (ยังไม่มี)
+├── start_abu_vision.sh     ← สั่งเปิด Flask UI
+├── stop_all.sh             ← ปิดทุก process
+├── requirements.txt        ← Python dependencies
+├── models/
+│   ├── weapon.onnx         ← Task 1: spearhead detection
+│   ├── cube.pt             ← Task 2: cube detection
+│   ├── martial.pt          ← Task 3: (ยังไม่มี)
+│   └── centroid_config.txt ← centroid offset ต่อ class (tuned)
+└── ui/                     ← Flask Mission Control UI
+    ├── app.py              ← Flask entry point
+    ├── api/                ← REST API endpoints
+    │   ├── control.py      ← mission commands
+    │   ├── telemetry.py    ← camera stream
+    │   ├── diagnostics.py  ← system test
+    │   └── mission.py      ← path planning API
+    ├── core/               ← business logic
+    │   ├── state.py        ← robot_state shared dict
+    │   ├── pathfinding.py  ← Meihua Forest path planner
+    │   └── logger.py       ← rotating log setup
+    ├── templates/
+    │   └── index.html      ← operator UI (TailwindCSS)
+    └── static/             ← icons, manifest (PWA)
 ```
-
-Flask UI (mission control) อยู่ที่: `https://github.com/tawanNophaket/R2-ABU`
 
 ---
 

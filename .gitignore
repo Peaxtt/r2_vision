@@ -1,6 +1,10 @@
 __pycache__/
 *.pyc
+*.pyo
 models/*.pt
 models/*.onnx
 models/*.engine
 *.log
+ui/__pycache__/
+ui/api/__pycache__/
+ui/core/__pycache__/

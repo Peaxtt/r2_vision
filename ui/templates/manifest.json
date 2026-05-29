@@ -1,0 +1,22 @@
+{
+  "name": "ABU Robocon 2026",
+  "short_name": "ABU 2026",
+  "description": "R2 Vision & Mission Control — Kung Fu Quest",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

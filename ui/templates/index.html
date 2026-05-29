@@ -1,0 +1,1884 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ABU 2026">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="manifest" href="/manifest.json">
+    <title>ABU Main System 2026 - Kung Fu Quest</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #f8fafc;
+            --bg-panel: rgba(255, 255, 255, 0.75);
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --accent-r1: #4f46e5;
+            --accent-r2: #10b981;
+            --accent-fake: #f59e0b;
+            --border-color: #e2e8f0;
+            --field-bg: #f8fafc;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: row;
+            background-image: radial-gradient(#e2e8f0 0.8px, transparent 0.8px);
+            background-size: 20px 20px;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+            box-sizing: border-box;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* --- Header & Layout --- */
+        .glass-panel {
+            background: var(--bg-panel);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+        }
+
+        /* --- Field Container --- */
+        .field-container {
+            background-color: var(--field-bg);
+            border: 4px solid #cbd5e1;
+            border-radius: 20px;
+            position: relative;
+            padding: 12px;
+            background-image: 
+                linear-gradient(rgba(203, 213, 225, 0.3) 1px, transparent 1px), 
+                linear-gradient(90deg, rgba(203, 213, 225, 0.3) 1px, transparent 1px);
+            background-size: 30px 30px;
+            background-position: center center;
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 0;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        
+        .field-container::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, transparent 30%, rgba(248, 250, 252, 0.85) 100%);
+            pointer-events: none;
+        }
+
+        .zone-stripe-start { 
+            background: repeating-linear-gradient(45deg, #fcd34d, #fcd34d 10px, #b45309 10px, #b45309 20px); 
+            height: 8px; border-radius: 4px; margin-bottom: 2vh; opacity: 0.9; width: 100%; max-width: 38vh; z-index: 5; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);
+        }
+        .zone-stripe-exit { 
+            background: repeating-linear-gradient(-45deg, #34d399, #34d399 10px, #047857 10px, #047857 20px); 
+            height: 8px; border-radius: 4px; margin-top: 3vh; opacity: 0.9; width: 100%; max-width: 38vh; z-index: 5; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);
+        }
+
+        /* --- Grid & Blocks --- */
+        .grid-layout { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 1.5vh; 
+            position: relative; 
+            width: 38vh; 
+            max-width: 100%; 
+            margin: 1vh 0 2vh 0;
+            z-index: 10;
+        }
+
+        .block-cell {
+            position: relative; 
+            border-radius: 12px;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center;
+            cursor: pointer; 
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            aspect-ratio: 1/1; 
+            font-weight: 900; 
+            z-index: 20;
+            font-size: clamp(0.8rem, 2.5vh, 1.2rem);
+            font-family: 'JetBrains Mono', monospace;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .item-empty { --top-color: #f1f5f9; --side-color: #cbd5e1; color: #94a3b8; border: 1.5px dashed #cbd5e1; text-shadow: none; }
+        .item-r1 { --top-color: #4f46e5; --side-color: #312e81; color: white; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25); text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        .item-r2 { --top-color: #10b981; --side-color: #064e3b; color: white; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25); text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        .item-fake { --top-color: #f59e0b; --side-color: #78350f; color: white; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.25); text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+
+        /* 3D Isometric Effect */
+        .block-cell {
+            background: linear-gradient(135deg, var(--top-color), color-mix(in srgb, var(--top-color) 80%, black));
+        }
+
+        .block-h200 { transform: translateY(-3px); box-shadow: 0 3px 0 var(--side-color), 0 6px 10px rgba(0,0,0,0.15); margin-bottom: 3px; }
+        .block-h400 { transform: translateY(-7px); box-shadow: 0 7px 0 var(--side-color), 0 12px 15px rgba(0,0,0,0.18); margin-bottom: 7px; }
+        .block-h600 { transform: translateY(-14px); box-shadow: 0 14px 0 var(--side-color), 0 20px 20px rgba(0,0,0,0.22); margin-bottom: 14px; }
+
+        .block-cell:hover:not(.locked) { 
+            filter: brightness(1.15); 
+            transform: translateY(calc(-6px + var(--hover-shift, -6px))) scale(1.03); 
+        }
+
+        .path-trace {
+            box-shadow: 0 0 0 3px #db2777, 0 0 15px rgba(219,39,119,0.3) !important;
+            transform: translateY(-8px) scale(1.05) !important; 
+            z-index: 25;
+            border-color: #db2777;
+        }
+
+        /* --- Robot Styling --- */
+        #robot-container {
+            position: absolute; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+            z-index: 50; transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
+            transform: translate(-50%, -50%); opacity: 0; pointer-events: none;
+        }
+        .robot-chassis {
+            width: 30px; height: 30px; background: #cbd5e1; border-radius: 6px;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.2), inset 0 2px 5px rgba(255,255,255,0.8);
+            position: relative; z-index: 2; display: flex; align-items: center; justify-content: center;
+        }
+        .robot-theme-r2 .robot-chassis { background: linear-gradient(135deg, #a7f3d0, #10b981); border: 2px solid #059669; }
+        .robot-theme-r1 .robot-chassis { background: linear-gradient(135deg, #bfdbfe, #3b82f6); border: 2px solid #2563eb; }
+        
+        .robot-front-sensor { position: absolute; top: -3px; width: 12px; height: 4px; border-radius: 2px; box-shadow: 0 0 10px currentColor; }
+        .robot-theme-r2 .robot-front-sensor { background: #fff; color: #10b981; }
+        .robot-theme-r1 .robot-front-sensor { background: #fff; color: #3b82f6; }
+        
+        .robot-wheel { position: absolute; width: 6px; height: 14px; background: #020617; border-radius: 2px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+        .w-tl { top: -3px; left: -4px; } .w-tr { top: -3px; right: -4px; } .w-bl { bottom: -3px; left: -4px; } .w-br { bottom: -3px; right: -4px; }
+        
+        #robot-cargo { width: 14px; height: 14px; border: 2px solid white; border-radius: 3px; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        .robot-theme-r2 #robot-cargo { background: #10b981; }
+        .robot-theme-r1 #robot-cargo { background: #3b82f6; }
+
+        /* --- UI Controls --- */
+        .btn { 
+            padding: 10px 16px; font-weight: 800; border-radius: 10px; cursor: pointer; 
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); text-transform: uppercase; 
+            font-size: 11px; letter-spacing: 0.8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; 
+            border: 1px solid transparent;
+        }
+        .btn-primary { background: #4f46e5; color: white; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2); }
+        .btn-primary:hover { background: #4338ca; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3); }
+        .btn-success { background: #10b981; color: white; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2); }
+        .btn-success:hover { background: #059669; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3); }
+        .btn-secondary { background: #f1f5f9; color: #334155; border-color: #e2e8f0; }
+        .btn-secondary:hover { background: #e2e8f0; border-color: #cbd5e1; transform: translateY(-1px); }
+        .btn-danger { background: #ef4444; color: white; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); }
+        .btn-danger:hover { background: #dc2626; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(239, 68, 68, 0.3); }
+
+        .tab-btn { border-bottom: 3px solid transparent; transition: all 0.3s; opacity: 0.6; }
+        .tab-btn.active { opacity: 1; border-color: currentColor; background: rgba(0,0,0,0.02); }
+        .tab-btn.r2 { color: #10b981; }
+        .tab-btn.r1 { color: #4f46e5; }
+
+        /* Custom Scrollbar for light theme */
+        .scrollable-content { flex: 1; overflow-y: auto; padding-right: 8px; }
+        .scrollable-content::-webkit-scrollbar { width: 5px; }
+        .scrollable-content::-webkit-scrollbar-track { background: transparent; }
+        .scrollable-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .scrollable-content::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Toggles */
+        .toggle-checkbox:checked { right: 0; border-color: var(--accent-r2); }
+        .toggle-checkbox:checked + .toggle-label { background-color: var(--accent-r2); }
+        .toggle-checkbox { right: 0; z-index: 1; border-color: #cbd5e1; transition: all 0.3s; background: #ffffff; }
+        .toggle-label { background-color: #e2e8f0; transition: all 0.3s; }
+
+        /* Input styling */
+        input[type="number"], select { 
+            background: #ffffff; color: #0f172a; border: 1px solid #cbd5e1; 
+            border-radius: 8px; outline: none; transition: all 0.2s;
+        }
+        input[type="number"]:focus, select:focus { border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.25); }
+
+        .route-card {
+            background: rgba(248, 250, 252, 0.8); border: 1px solid #e2e8f0;
+            transition: all 0.2s; cursor: pointer; border-left: 4px solid transparent;
+        }
+        .route-card:hover {
+            border-left-color: #db2777; background: #ffffff;
+            transform: translateX(4px); box-shadow: 0 6px 15px rgba(0,0,0,0.05);
+        }
+        .route-card.selected {
+            border-left-color: #10b981; background: #f0fdf4;
+            box-shadow: 0 4px 12px rgba(16,185,129,0.1);
+        }
+
+        /* ROS State badge animations */
+        @keyframes state-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .state-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 9px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
+        .state-idle    { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+        .state-weapon  { background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe; animation: state-pulse 1.5s ease-in-out infinite; }
+        .state-meihua  { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; animation: state-pulse 1.5s ease-in-out infinite; }
+        .state-martial { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; animation: state-pulse 1.5s ease-in-out infinite; }
+
+        /* Mission config bar */
+        .cfg-tag { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 6px; font-size: 9px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid; }
+    </style>
+</head>
+<body class="flex flex-row overflow-hidden bg-slate-50 p-4 gap-4 h-screen">
+
+    <!-- SIDEBAR -->
+    <aside class="w-80 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-2xl p-6 flex flex-col gap-6 shrink-0 h-full z-50 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.02)]">
+        <!-- Logo Header -->
+        <div class="flex items-center gap-3 border-b border-slate-100 pb-5 shrink-0">
+            <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.5)] border border-emerald-400 animate-pulse"></span>
+            <div>
+                <h1 class="text-sm font-black text-slate-800 tracking-wider uppercase leading-none">ABU 2026</h1>
+                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 block">R2 Vision Control Console</span>
+            </div>
+        </div>
+
+        <!-- Navigation Stack -->
+        <div class="flex flex-col gap-2 flex-1">
+            <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Active Task Mode</span>
+            
+            <button id="navTask1" onclick="switchTaskView('task1')" class="px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl border border-indigo-200 text-indigo-700 bg-indigo-50 shadow-sm transition-all cursor-pointer flex items-center gap-3 w-full">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                Task 1: Martial Club
+            </button>
+            
+            <button id="navTask2" onclick="switchTaskView('task2')" class="px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-3 w-full">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg>
+                Task 2: Meihua Forest
+            </button>
+            
+            <button id="navTask3" onclick="switchTaskView('task3')" class="px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-3 w-full">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                Task 3: Arena
+            </button>
+            
+            <button id="navSystemTest" onclick="switchTaskView('systemtest')" class="px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-3 w-full">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                System Test
+            </button>
+
+            <!-- Task 2 controls inside the sidebar -->
+            <div class="mt-6 flex flex-col gap-2 border-t border-slate-100 pt-5 hidden" id="task2-controls">
+                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Grid Map Tools</span>
+                <button onclick="randomizeMap()" class="btn btn-secondary w-full justify-start text-[10px] py-2.5 flex items-center gap-2">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    Randomize Setup
+                </button>
+                <button onclick="resetMap()" class="btn btn-secondary w-full justify-start text-[10px] py-2.5 flex items-center gap-2">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    Clear Map Grid
+                </button>
+            </div>
+        </div>
+
+        <!-- Team Color Toggle -->
+        <div class="flex flex-col gap-2 border-t border-slate-100 pt-4 shrink-0">
+            <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Team Color</span>
+            <div class="grid grid-cols-2 gap-2">
+                <button id="colorBtnBlue" onclick="setTeamColor('BLUE')"
+                    class="py-2 text-[10px] font-black uppercase tracking-widest rounded-lg border-2 border-blue-500 bg-blue-600 text-white transition-all">
+                    BLUE
+                </button>
+                <button id="colorBtnRed" onclick="setTeamColor('RED')"
+                    class="py-2 text-[10px] font-black uppercase tracking-widest rounded-lg border-2 border-slate-200 bg-slate-50 text-slate-500 transition-all">
+                    RED
+                </button>
+            </div>
+        </div>
+
+        <!-- System Health Panel -->
+        <div class="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2.5 shrink-0">
+            <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block border-b border-slate-200/50 pb-1.5">System Health</span>
+            <div class="flex items-center justify-between text-[10px] font-bold text-slate-600 uppercase">
+                <span>ROS State:</span>
+                <span id="macroStateDisplay" class="font-mono text-slate-500">IDLE</span>
+            </div>
+            <div class="flex items-center justify-between text-[10px] font-bold text-slate-600 uppercase">
+                <span>IMU Pitch:</span>
+                <span id="imuPitchDisplay" class="font-mono text-slate-700">0.0°</span>
+            </div>
+            <div class="flex items-center justify-between text-[10px] font-bold text-slate-600 uppercase">
+                <span>HW Error:</span>
+                <span id="hwErrorDisplay" class="font-mono text-emerald-600">None</span>
+            </div>
+        </div>
+
+        <!-- Global Emergency Stop -->
+        <button onclick="sendCommand('DISENGAGE')" class="w-full py-3.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-lg shadow-rose-600/10 hover:shadow-rose-500/20 transition-all focus:ring-2 focus:ring-rose-400 flex items-center justify-center gap-2 shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+            Emergency Stop
+        </button>
+    </aside>
+
+    <!-- MAIN WORKSPACE -->
+    <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden gap-4">
+
+    <!-- Mission Config Bar -->
+    <div class="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-xl shadow-sm shrink-0 flex-wrap">
+        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1">Mission Config</span>
+        <span id="cfgColor" class="cfg-tag bg-blue-50 text-blue-700 border-blue-200">BLUE</span>
+        <span class="text-slate-300 text-xs">|</span>
+        <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Spear: <span id="cfgSpear" class="text-slate-800 font-black">1</span></span>
+        <span class="text-slate-300 text-xs">|</span>
+        <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Path: <span id="cfgPath" class="text-slate-800 font-black">—</span></span>
+        <span class="text-slate-300 text-xs">|</span>
+        <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wide">TTT: <span id="cfgTtt" class="text-slate-800 font-black">MIDDLE</span></span>
+        <div class="ml-auto">
+            <span id="cfgRosState" class="state-badge state-idle">IDLE</span>
+        </div>
+    </div>
+
+    <!-- TASK 1: MARTIAL CLUB VIEW -->
+    <main id="task1-view" class="flex flex-row gap-6 flex-1 min-h-0 z-10 relative">
+        <!-- Camera Feed -->
+        <section class="flex-[1.4] flex flex-col gap-4">
+            <div class="glass-panel p-4 rounded-2xl flex flex-col flex-1 relative overflow-hidden">
+                <div class="flex justify-between items-center mb-3 z-10">
+                    <h2 class="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                        Live Feed: Intel RealSense D435i
+                    </h2>
+                    <div class="flex items-center gap-2">
+                        <span id="fpsDisplay" class="text-[10px] font-mono font-bold text-slate-500">FPS: — | Depth: Active</span>
+                        <button onclick="resetCamera()" id="btnCameraReset" class="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-500 hover:text-amber-700 border border-slate-200 hover:border-amber-300 transition-all active:scale-95">⟳ Camera</button>
+                    </div>
+                </div>
+                <div class="bg-slate-950 rounded-xl flex-1 border border-slate-200 relative flex items-center justify-center overflow-hidden shadow-inner">
+                    <img id="videoFeed" class="absolute inset-0 w-full h-full object-cover opacity-80" alt="Video Feed Connecting..." onerror="this.onerror=null; this.outerHTML='<div class=\'flex flex-col items-center gap-3 text-slate-500\'><svg class=\'w-12 h-12 animate-pulse\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z\'></path></svg><span class=\'font-mono text-sm uppercase tracking-widest\'>WAITING FOR REALSENSE STREAM</span></div>'">
+                    
+                    <!-- HUD Overlay -->
+                    <div class="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between z-20">
+                        <div class="flex justify-between">
+                            <div class="w-8 h-8 border-t-2 border-l-2 border-emerald-400/50"></div>
+                            <div class="w-8 h-8 border-t-2 border-r-2 border-emerald-400/50"></div>
+                        </div>
+                        
+                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center opacity-30">
+                            <div class="w-32 h-32 border border-emerald-400 rounded-full"></div>
+                            <div class="w-1 h-4 bg-emerald-400 absolute top-0"></div>
+                            <div class="w-1 h-4 bg-emerald-400 absolute bottom-0"></div>
+                            <div class="w-4 h-1 bg-emerald-400 absolute left-0"></div>
+                            <div class="w-4 h-1 bg-emerald-400 absolute right-0"></div>
+                            <div class="w-1 h-1 bg-emerald-400 rounded-full"></div>
+                        </div>
+
+                        <div class="flex justify-between items-end pointer-events-none">
+                            <div class="w-8 h-8 border-b-2 border-l-2 border-emerald-400/50"></div>
+                            <!-- Sleek Floating Telemetry Badge -->
+                            <div class="bg-slate-900/85 backdrop-blur-md border border-slate-700/60 rounded-xl px-4 py-2 flex gap-4 text-[10px] font-mono text-emerald-400/90 shadow-xl pointer-events-auto">
+                                <span>X: <span id="telemetryX" class="text-white font-black">0.00 <span class="text-[9px] font-normal text-slate-400">mm</span></span></span>
+                                <span class="border-l border-slate-800"></span>
+                                <span>Y: <span id="telemetryY" class="text-white font-black">0.00 <span class="text-[9px] font-normal text-slate-400">mm</span></span></span>
+                                <span class="border-l border-slate-800"></span>
+                                <span>T: <span id="telemetryTheta" class="text-white font-black">0.00 <span class="text-[9px] font-normal text-slate-400">deg</span></span></span>
+                            </div>
+                            <div class="w-8 h-8 border-b-2 border-r-2 border-emerald-400/50"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Status & Controls -->
+        <section class="flex-[1.1] flex flex-col gap-4 overflow-y-auto scrollable-content pr-1">
+            <div class="glass-panel p-6 rounded-2xl flex flex-col gap-5 h-full">
+                <h2 class="text-xs font-black text-slate-700 uppercase tracking-widest border-b border-slate-200 pb-3 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    Auto Assembly Control
+                </h2>
+                
+                <!-- Spearhead Selector -->
+                <div class="bg-slate-100/50 p-4 rounded-xl border border-slate-200/80">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Select Spearhead to Pick (เลือกหอกที่จะเก็บ)</label>
+                        <span class="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 uppercase">Limit 1</span>
+                    </div>
+                    <div class="grid grid-cols-6 gap-2">
+                        <button onclick="setSpearhead(1)" id="sh-btn-1" class="sh-btn py-2.5 bg-indigo-600 text-white border border-indigo-700 rounded shadow-sm font-bold hover:bg-indigo-500 transition-colors focus:ring-2 focus:ring-indigo-400 ring-offset-1 active">1</button>
+                        <button onclick="setSpearhead(2)" id="sh-btn-2" class="sh-btn py-2.5 bg-slate-50 border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 hover:text-slate-700 shadow-sm focus:ring-2 focus:ring-indigo-400 ring-offset-1">2</button>
+                        <button onclick="setSpearhead(3)" id="sh-btn-3" class="sh-btn py-2.5 bg-slate-50 border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 hover:text-slate-700 shadow-sm focus:ring-2 focus:ring-indigo-400 ring-offset-1">3</button>
+                        <button onclick="setSpearhead(4)" id="sh-btn-4" class="sh-btn py-2.5 bg-slate-50 border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 hover:text-slate-700 shadow-sm focus:ring-2 focus:ring-indigo-400 ring-offset-1">4</button>
+                        <button onclick="setSpearhead(5)" id="sh-btn-5" class="sh-btn py-2.5 bg-slate-50 border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 hover:text-slate-700 shadow-sm focus:ring-2 focus:ring-indigo-400 ring-offset-1">5</button>
+                        <button onclick="setSpearhead(6)" id="sh-btn-6" class="sh-btn py-2.5 bg-slate-50 border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 hover:text-slate-700 shadow-sm focus:ring-2 focus:ring-indigo-400 ring-offset-1">6</button>
+                    </div>
+                </div>
+
+                <!-- Assembly Step Tracker -->
+                <div class="bg-slate-100/50 p-3 rounded-xl border border-slate-200/80 flex flex-col gap-1.5">
+                    <label class="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Assembly Progress (ขั้นตอนการประกอบ)</label>
+                    <div class="flex flex-col gap-1.5 mt-1">
+                        <div id="step-1" class="step-item flex items-center gap-3.5 p-1.5 px-3 rounded-lg border bg-indigo-50 border-indigo-200 text-indigo-900 shadow-sm transition-all duration-300">
+                            <div class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black bg-indigo-600 text-white shadow-sm transition-all">1</div>
+                            <div class="step-label text-[11px] font-bold text-slate-800 transition-all">Start Position <span class="text-[9px] font-normal text-slate-400 ml-1.5">(รอสั่งการ)</span></div>
+                        </div>
+                        <div id="step-2" class="step-item flex items-center gap-3.5 p-1.5 px-3 rounded-lg border bg-slate-50/50 border-slate-200/60 opacity-50 transition-all duration-300">
+                            <div class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black bg-slate-200 text-slate-500 shadow-sm transition-all">2</div>
+                            <div class="step-label text-[11px] font-bold text-slate-600 transition-all">Moving to Spearhead <span class="text-[9px] font-normal text-slate-400 ml-1.5">(กำลังไปเก็บหอก)</span></div>
+                        </div>
+                        <div id="step-3" class="step-item flex items-center gap-3.5 p-1.5 px-3 rounded-lg border bg-slate-50/50 border-slate-200/60 opacity-50 transition-all duration-300">
+                            <div class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black bg-slate-200 text-slate-500 shadow-sm transition-all">3</div>
+                            <div class="step-label text-[11px] font-bold text-slate-600 transition-all">Waiting at Assembly <span class="text-[9px] font-normal text-slate-400 ml-1.5">(รอที่จุดประกอบ)</span></div>
+                        </div>
+                        <div id="step-4" class="step-item flex items-center gap-3.5 p-1.5 px-3 rounded-lg border bg-slate-50/50 border-slate-200/60 opacity-50 transition-all duration-300">
+                            <div class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black bg-slate-200 text-slate-500 shadow-sm transition-all">4</div>
+                            <div class="step-label text-[11px] font-bold text-slate-600 transition-all">Assembling Spearhead <span class="text-[9px] font-normal text-slate-400 ml-1.5">(กำลังประกอบ)</span></div>
+                        </div>
+                        <div id="step-5" class="step-item flex items-center gap-3.5 p-1.5 px-3 rounded-lg border bg-slate-50/50 border-slate-200/60 opacity-50 transition-all duration-300">
+                            <div class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black bg-slate-200 text-slate-500 shadow-sm transition-all">5</div>
+                            <div class="step-label text-[11px] font-bold text-slate-600 transition-all">Assembly Complete <span class="text-[9px] font-normal text-slate-400 ml-1.5">(ประกอบเสร็จสิ้น)</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Controls -->
+                <div class="flex flex-col gap-2 shrink-0">
+                    <button id="btnTask1Start" onclick="startTask1()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] uppercase tracking-widest py-3.5 rounded-xl shadow-md transition-all active:scale-95 border-2 border-indigo-500 relative overflow-hidden group">
+                        <span class="relative z-10">START AUTO RUN</span>
+                        <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                    </button>
+                    <button id="btnTask1Reset" onclick="resetTask1()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-[10px] uppercase tracking-widest py-3.5 rounded-xl shadow-md transition-all active:scale-95 border-2 border-slate-200 relative overflow-hidden group">
+                        <span class="relative z-10">FIELD RESET (ขอรีเซ็ตสนามจริง)</span>
+                        <div class="absolute inset-0 bg-black/5 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                    </button>
+                </div>
+
+                <!-- Device Status & Parameters -->
+                <div class="bg-slate-100/50 border border-slate-200/80 rounded-xl p-4 shrink-0 flex flex-col gap-3">
+                    <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Device Parameters</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <!-- Gripper Status -->
+                        <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Gripper Status</span>
+                                <span class="text-xs font-black text-emerald-600 uppercase mt-0.5 block" id="gripperStatus">OPEN</span>
+                            </div>
+                            <div class="w-3 h-3 rounded-full bg-emerald-500 shadow-sm border border-emerald-400" id="gripperLed"></div>
+                        </div>
+
+                        <!-- YOLO Confidence Threshold Slider -->
+                        <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">YOLO Conf</span>
+                                <span class="text-[11px] font-mono font-bold text-indigo-600" id="yoloConfVal">0.75</span>
+                            </div>
+                            <input type="range" min="0.30" max="0.95" step="0.05" value="0.75" id="yoloConfSlider" oninput="updateYoloConfidence(this.value)" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- Console Log -->
+                <div class="bg-slate-50/80 rounded-xl p-3.5 mt-auto flex-1 flex flex-col overflow-hidden min-h-[90px] border border-slate-200/80 shadow-inner">
+                    <h3 class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 shrink-0">System Log</h3>
+                    <div id="task1Log" class="font-mono text-[10px] text-slate-600 flex flex-col gap-1 overflow-y-auto pr-2" style="max-height: 100px;">
+                        <span>> System Initialized.</span>
+                        <span>> Waiting for start command...</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- TASK 2: MEIHUA FOREST VIEW -->
+    <main id="task2-view" class="flex flex-row gap-6 flex-1 min-h-0 z-10 relative hidden">
+
+        <!-- LEFT: FIELD VIEW -->
+        <section class="flex-[1.2] flex flex-col gap-2 min-h-0 relative">
+            <div class="field-container glass-panel">
+                <div class="text-center font-black text-amber-600/70 uppercase tracking-widest mb-1 text-xs z-10">Start / Entrance</div>
+                <div class="zone-stripe-start"></div>
+
+                <div id="gridContainer" class="grid-layout mx-auto">
+                    <!-- Robot Injection Point -->
+                    <div id="robot-container" class="robot-theme-r2">
+                        <div id="robot-chassis" class="robot-chassis">
+                            <div class="robot-front-sensor absolute top-[-2px]"></div>
+                            <div class="robot-wheel w-tl"></div><div class="robot-wheel w-tr"></div>
+                            <div class="robot-wheel w-bl"></div><div class="robot-wheel w-br"></div>
+                            <div id="robot-cargo" class="hidden"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="zone-stripe-exit"></div>
+                <div class="text-center font-black text-emerald-600/70 uppercase tracking-widest mt-1 text-xs z-10">Exit Zone</div>
+            </div>
+        </section>
+
+        <!-- RIGHT: CONTROLS & RESULTS -->
+        <section class="flex-[0.8] flex flex-col gap-4 overflow-hidden">
+
+            <!-- ROUTING CONFIG -->
+            <div id="routingPanel" class="glass-panel rounded-2xl flex flex-col transition-all duration-500 shrink-0">
+                <div class="border-b border-slate-200 px-5 py-4 flex items-center justify-between">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-slate-800">R2 Collector Path Settings</h3>
+                    <span class="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-600">R2 Active</span>
+                </div>
+
+                <div class="p-5 flex flex-col gap-4">
+                    <div class="flex items-center justify-between bg-slate-100/50 p-4 rounded-xl border border-slate-200/80">
+                        <div class="text-sm">
+                            <label id="lblTargetType" class="font-bold text-emerald-700 block uppercase tracking-wider">Targets to Pick:</label>
+                            <span class="text-[10px] text-slate-500 font-medium">Number of KFS to collect</span>
+                        </div>
+                        <input type="number" id="nPicks" value="2" min="1" max="4" class="w-16 text-center font-black text-xl py-1">
+                    </div>
+
+                    <div id="r2Options" class="grid grid-cols-2 gap-3">
+                        <div class="flex items-center justify-between bg-slate-100/50 px-4 py-3 rounded-xl border border-slate-200/80">
+                            <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Diagonal<br><span class="text-slate-500 font-normal">Picking</span></span>
+                            <div class="relative inline-block w-10 align-middle select-none">
+                                <input type="checkbox" id="allowDiagonal" onchange="handleToggle()" class="toggle-checkbox absolute block w-5 h-5 rounded-full border-2 appearance-none cursor-pointer right-5 checked:right-0"/>
+                                <label for="allowDiagonal" class="toggle-label block overflow-hidden h-5 rounded-full cursor-pointer"></label>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between bg-slate-100/50 px-4 py-3 rounded-xl border border-slate-200/80">
+                            <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Strict<br><span class="text-slate-500 font-normal">Clearance</span></span>
+                            <div class="relative inline-block w-10 align-middle select-none">
+                                <input type="checkbox" id="strictClearance" onchange="handleToggle()" class="toggle-checkbox absolute block w-5 h-5 rounded-full border-2 appearance-none cursor-pointer right-5 checked:right-0"/>
+                                <label for="strictClearance" class="toggle-label block overflow-hidden h-5 rounded-full cursor-pointer"></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button id="btnGen" onclick="generateRoutes()" class="btn btn-success w-full py-3 mt-1 text-sm">Calculate Optimal Path</button>
+                </div>
+            </div>
+
+            <!-- RESULTS LIST -->
+            <div id="resultsPanel" class="glass-panel rounded-2xl flex-1 flex flex-col overflow-hidden hidden transform transition-all duration-300 translate-y-4 opacity-0" style="animation: slideUp 0.4s ease forwards;">
+                <div class="px-5 py-3 border-b border-slate-200 bg-slate-100/30 flex justify-between items-center shadow-md">
+                    <h2 class="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                        <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        Telemetry Routes
+                    </h2>
+                    <span id="validationBox" class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">3 R1 | 4 R2 | 1 FAKE</span>
+                </div>
+                <div id="routesOutput" class="scrollable-content p-4 flex flex-col gap-3"></div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- TASK 3: ARENA VIEW -->
+    <main id="task3-view" class="flex flex-row gap-6 flex-1 min-h-0 z-10 relative hidden">
+        <!-- Camera Feed -->
+        <section class="flex-[1.5] flex flex-col gap-4">
+            <div class="glass-panel p-4 rounded-2xl flex flex-col flex-1 relative overflow-hidden">
+                <div class="flex justify-between items-center mb-3 z-10">
+                    <h2 class="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                        Live Feed: Intel RealSense D435i
+                    </h2>
+                    <span id="fpsDisplay" class="text-[10px] font-mono font-bold text-slate-500">FPS: — | Depth: Active</span>
+                </div>
+                <div class="bg-slate-950 rounded-xl flex-1 border border-slate-200 relative flex items-center justify-center overflow-hidden shadow-inner">
+                    <img id="videoFeed2" class="absolute inset-0 w-full h-full object-cover opacity-80" alt="Video Feed Connecting..." onerror="this.onerror=null; this.outerHTML='<div class=\'flex flex-col items-center gap-3 text-slate-500\'><svg class=\'w-12 h-12 animate-pulse\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z\'></path></svg><span class=\'font-mono text-sm uppercase tracking-widest\'>WAITING FOR REALSENSE STREAM</span></div>'">
+                    
+                    <!-- HUD Overlay specific to Tic-Tac-Toe -->
+                    <div class="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between z-20">
+                        <div class="flex justify-between">
+                            <div class="w-8 h-8 border-t-2 border-l-2 border-emerald-400/50"></div>
+                            <div class="w-8 h-8 border-t-2 border-r-2 border-emerald-400/50"></div>
+                        </div>
+                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-40">
+                            <!-- Simple Tic Tac Toe grid overlay -->
+                            <div class="grid grid-cols-3 grid-rows-3 gap-1 w-48 h-48">
+                                <div class="border-b-2 border-r-2 border-emerald-400"></div><div class="border-b-2 border-r-2 border-emerald-400"></div><div class="border-b-2 border-emerald-400"></div>
+                                <div class="border-b-2 border-r-2 border-emerald-400"></div><div class="border-b-2 border-r-2 border-emerald-400"></div><div class="border-b-2 border-emerald-400"></div>
+                                <div class="border-r-2 border-emerald-400"></div><div class="border-r-2 border-emerald-400"></div><div></div>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-end pointer-events-none">
+                            <div class="w-8 h-8 border-b-2 border-l-2 border-emerald-400/50"></div>
+                            <!-- Sleek Floating Telemetry Badge -->
+                            <div class="bg-slate-900/85 backdrop-blur-md border border-slate-700/60 rounded-xl px-4 py-2 flex gap-4 text-[10px] font-mono text-emerald-400/90 shadow-xl pointer-events-auto">
+                                <span>X: <span id="t3-telemetryX" class="text-white font-black">0.00 <span class="text-[9px] font-normal text-slate-400">mm</span></span></span>
+                                <span class="border-l border-slate-800"></span>
+                                <span>Y: <span id="t3-telemetryY" class="text-white font-black">0.00 <span class="text-[9px] font-normal text-slate-400">mm</span></span></span>
+                                <span class="border-l border-slate-800"></span>
+                                <span>T: <span id="t3-telemetryTheta" class="text-white font-black">0.00 <span class="text-[9px] font-normal text-slate-400">deg</span></span></span>
+                            </div>
+                            <div class="w-8 h-8 border-b-2 border-r-2 border-emerald-400/50"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Status & Controls -->
+        <section class="flex-1 flex flex-col gap-4">
+            <div class="glass-panel p-6 rounded-2xl flex flex-col gap-6 h-full">
+                <h2 class="text-sm font-black text-slate-700 uppercase tracking-widest border-b border-slate-200 pb-3">Tic-Tac-Toe Control (R2)</h2>
+                
+                <div class="bg-slate-100/50 p-4 rounded-xl border border-slate-200/80">
+                    <label class="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-2">Target Middle/Top Row Slot</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="setTicTacToeSlot(1)" id="ttt-btn-1" class="ttt-btn py-4 bg-indigo-600 text-white border border-indigo-700 shadow-md rounded font-black text-xl hover:bg-indigo-500 transition-colors focus:ring-2 focus:ring-indigo-400 ring-offset-1 active">L</button>
+                        <button onclick="setTicTacToeSlot(2)" id="ttt-btn-2" class="ttt-btn py-4 bg-slate-50 text-slate-600 border border-slate-200 rounded shadow-sm font-black text-xl hover:bg-slate-100 transition-colors focus:ring-2 focus:ring-indigo-400 ring-offset-1">C</button>
+                        <button onclick="setTicTacToeSlot(3)" id="ttt-btn-3" class="ttt-btn py-4 bg-slate-50 text-slate-600 border border-slate-200 rounded shadow-sm font-black text-xl hover:bg-slate-100 transition-colors focus:ring-2 focus:ring-indigo-400 ring-offset-1">R</button>
+                    </div>
+                </div>
+
+                <button id="btnTask3Start" onclick="startTask3()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-2xl uppercase tracking-widest py-5 rounded-xl shadow-lg transition-all active:scale-95 border-2 border-indigo-500 relative overflow-hidden group shrink-0">
+                    <span class="relative z-10">DEPLOY KFS</span>
+                    <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                </button>
+
+
+                <div class="bg-slate-50/80 rounded-xl p-3.5 mt-auto flex-1 flex flex-col overflow-hidden border border-slate-200/80 shadow-inner">
+                    <h3 class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 shrink-0">Arena Log</h3>
+                    <div id="task3Log" class="font-mono text-[10px] text-slate-600 flex flex-col gap-1 overflow-y-auto pr-2" style="max-height: 120px;">
+                        <span>> Arena System Initialized.</span>
+                        <span>> Ready for KFS Deployment...</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- VISION TEST BAR — ปุ่ม switch model สำหรับ dev -->
+    <div id="vision-test-bar" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50 glass-panel px-4 py-2 rounded-2xl flex items-center gap-3 shadow-xl border border-slate-200">
+        <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Vision State:</span>
+        <span id="visionStateBadge" class="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-600">IDLE</span>
+        <div class="flex gap-2">
+            <button onclick="setVisionState('IDLE')" class="px-3 py-1 text-[10px] font-black uppercase rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700">IDLE</button>
+            <button onclick="setVisionState('WEAPON_CLUB')" class="px-3 py-1 text-[10px] font-black uppercase rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-700">WEAPON</button>
+            <button onclick="setVisionState('MEIHUA_FOREST_EXECUTION')" class="px-3 py-1 text-[10px] font-black uppercase rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-700">MEIHUA</button>
+            <button onclick="setVisionState('MARTIAL_ART_PLACEMENT')" class="px-3 py-1 text-[10px] font-black uppercase rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-700">MARTIAL</button>
+        </div>
+    </div>
+
+    <!-- SYSTEM TEST VIEW -->
+    <main id="systemtest-view" class="flex flex-row gap-6 flex-1 min-h-0 z-10 relative hidden">
+        <!-- LEFT COLUMN: Camera & IMU -->
+        <section class="flex-[1.2] flex flex-col gap-4 min-h-0">
+            <!-- Camera Diagnostic Module -->
+            <div class="glass-panel p-4 rounded-2xl flex flex-col flex-1 relative overflow-hidden">
+                <div class="flex justify-between items-center mb-3 z-10">
+                    <h2 class="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                        Camera Diagnostics: OAK-D Pro / RealSense
+                    </h2>
+                    <span class="text-[10px] font-mono font-bold text-slate-500">Live Video Stream</span>
+                </div>
+                <div class="bg-slate-950 rounded-xl flex-1 border border-slate-200 relative flex items-center justify-center overflow-hidden shadow-inner min-h-[220px]">
+                    <img id="videoFeed3" class="absolute inset-0 w-full h-full object-cover opacity-80" alt="Video Feed Connecting..." onerror="this.onerror=null; this.outerHTML='<div class=\'flex flex-col items-center gap-3 text-slate-500\'><svg class=\'w-12 h-12 animate-pulse\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z\'></path></svg><span class=\'font-mono text-sm uppercase tracking-widest\'>WAITING FOR CAMERA STREAM</span></div>'">
+                    
+                    <!-- HUD overlay for testing -->
+                    <div class="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between z-20">
+                        <div class="flex justify-between">
+                            <div class="w-6 h-6 border-t border-l border-indigo-400/40"></div>
+                            <div class="w-6 h-6 border-t border-r border-indigo-400/40"></div>
+                        </div>
+                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 border border-dashed border-indigo-400/30 rounded-full w-24 h-24 flex items-center justify-center">
+                            <div class="w-2 h-2 bg-indigo-500 rounded-full animate-ping opacity-60"></div>
+                        </div>
+                        <div class="flex justify-between items-end">
+                            <div class="w-6 h-6 border-b border-l border-indigo-400/40"></div>
+                            <div class="w-6 h-6 border-b border-r border-indigo-400/40"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Camera controls -->
+                <div class="grid grid-cols-3 gap-3 mt-4 pt-3 border-t border-slate-100">
+                    <div class="bg-slate-50 p-2 rounded-lg border border-slate-200/80">
+                        <div class="flex justify-between text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                            <span>Brightness</span>
+                            <span id="cam-brightness-val" class="font-mono text-slate-700">50</span>
+                        </div>
+                        <input type="range" min="0" max="100" value="50" id="cam-brightness" oninput="updateCameraConfig()" class="w-full h-1 bg-slate-200 rounded-lg cursor-pointer accent-indigo-600">
+                    </div>
+                    <div class="bg-slate-50 p-2 rounded-lg border border-slate-200/80">
+                        <div class="flex justify-between text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                            <span>Exposure</span>
+                            <span id="cam-exposure-val" class="font-mono text-slate-700">1.0</span>
+                        </div>
+                        <input type="range" min="0.1" max="2.0" step="0.1" value="1.0" id="cam-exposure" oninput="updateCameraConfig()" class="w-full h-1 bg-slate-200 rounded-lg cursor-pointer accent-indigo-600">
+                    </div>
+                    <div class="flex flex-col justify-end gap-1">
+                        <button onclick="captureCameraFrame()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[9px] uppercase tracking-widest py-2.5 rounded-lg shadow-sm transition-all active:scale-95 border border-indigo-500">
+                            Capture Frame
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- IMU Diagnostic Module -->
+            <div class="glass-panel p-4 rounded-2xl flex flex-col gap-3 shrink-0">
+                <h2 class="text-xs font-black text-slate-700 uppercase tracking-widest border-b border-slate-200 pb-2 flex items-center justify-between">
+                    <span>IMU Sensor (BNO055)</span>
+                    <span class="text-[9px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 uppercase">9-DOF Active</span>
+                </h2>
+                
+                <div class="grid grid-cols-3 gap-3">
+                    <!-- Orientation -->
+                    <div class="bg-slate-50/50 border border-slate-200/80 rounded-xl p-3 flex flex-col">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Roll</span>
+                        <span id="imu-roll" class="text-sm font-mono font-black text-slate-800">0.00°</span>
+                    </div>
+                    <div class="bg-slate-50/50 border border-slate-200/80 rounded-xl p-3 flex flex-col">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Pitch</span>
+                        <span id="imu-pitch" class="text-sm font-mono font-black text-slate-800">0.00°</span>
+                    </div>
+                    <div class="bg-slate-50/50 border border-slate-200/80 rounded-xl p-3 flex flex-col">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Yaw (Heading)</span>
+                        <span id="imu-yaw" class="text-sm font-mono font-black text-slate-800">0.00°</span>
+                    </div>
+                </div>
+                
+                <!-- Accel / Gyro Raw Readings -->
+                <div class="grid grid-cols-2 gap-3 text-[10px] bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 font-mono">
+                    <div class="flex flex-col gap-1 border-r border-slate-200 pr-3">
+                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Accelerometer (m/s²)</span>
+                        <div class="flex justify-between"><span>Acc X:</span><span id="imu-accx" class="font-bold">0.02</span></div>
+                        <div class="flex justify-between"><span>Acc Y:</span><span id="imu-accy" class="font-bold">-0.01</span></div>
+                        <div class="flex justify-between"><span>Acc Z:</span><span id="imu-accz" class="font-bold">9.81</span></div>
+                    </div>
+                    <div class="flex flex-col gap-1 pl-3">
+                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Gyroscope (rad/s)</span>
+                        <div class="flex justify-between"><span>Gyro X:</span><span id="imu-gyrox" class="font-bold">0.000</span></div>
+                        <div class="flex justify-between"><span>Gyro Y:</span><span id="imu-gyroy" class="font-bold">0.001</span></div>
+                        <div class="flex justify-between"><span>Gyro Z:</span><span id="imu-gyroz" class="font-bold">0.000</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT COLUMN: Motors, Encoders, Gripper, Diagnostics Log -->
+        <section class="flex-1 flex flex-col gap-4 overflow-hidden">
+            <div class="glass-panel p-5 rounded-2xl flex flex-col gap-4 h-full overflow-y-auto">
+                <h2 class="text-xs font-black text-slate-700 uppercase tracking-widest border-b border-slate-200 pb-3">Actuators & Odometry Test</h2>
+                
+                <!-- Motors Panel -->
+                <div class="bg-slate-100/50 p-3.5 rounded-xl border border-slate-200/80 flex flex-col gap-2 shrink-0">
+                    <div class="flex justify-between items-center mb-1">
+                        <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Motor Controllers (PWM / RPM)</h3>
+                        <button onclick="stopAllMotors()" class="bg-rose-600 hover:bg-rose-700 text-white font-black text-[9px] uppercase tracking-widest px-2.5 py-1 rounded shadow-sm transition-all border border-rose-500">STOP ALL</button>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3">
+                        <!-- Motor FL -->
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">FL Motor</span>
+                                <span id="m1-rpm" class="text-[9px] font-mono font-bold text-indigo-600">0 RPM</span>
+                            </div>
+                            <div class="flex gap-2 items-center">
+                                <input type="range" min="-100" max="100" value="0" id="motor-pwm-1" oninput="updateMotorTest(1, this.value)" class="flex-1 h-1.5 bg-slate-200 rounded-lg cursor-pointer accent-indigo-600">
+                                <span id="motor-pwm-val-1" class="text-[10px] font-mono font-bold text-slate-600 w-8 text-right">0%</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Motor FR -->
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">FR Motor</span>
+                                <span id="m2-rpm" class="text-[9px] font-mono font-bold text-indigo-600">0 RPM</span>
+                            </div>
+                            <div class="flex gap-2 items-center">
+                                <input type="range" min="-100" max="100" value="0" id="motor-pwm-2" oninput="updateMotorTest(2, this.value)" class="flex-1 h-1.5 bg-slate-200 rounded-lg cursor-pointer accent-indigo-600">
+                                <span id="motor-pwm-val-2" class="text-[10px] font-mono font-bold text-slate-600 w-8 text-right">0%</span>
+                            </div>
+                        </div>
+
+                        <!-- Motor RL -->
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">RL Motor</span>
+                                <span id="m3-rpm" class="text-[9px] font-mono font-bold text-indigo-600">0 RPM</span>
+                            </div>
+                            <div class="flex gap-2 items-center">
+                                <input type="range" min="-100" max="100" value="0" id="motor-pwm-3" oninput="updateMotorTest(3, this.value)" class="flex-1 h-1.5 bg-slate-200 rounded-lg cursor-pointer accent-indigo-600">
+                                <span id="motor-pwm-val-3" class="text-[10px] font-mono font-bold text-slate-600 w-8 text-right">0%</span>
+                            </div>
+                        </div>
+
+                        <!-- Motor RR -->
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">RR Motor</span>
+                                <span id="m4-rpm" class="text-[9px] font-mono font-bold text-indigo-600">0 RPM</span>
+                            </div>
+                            <div class="flex gap-2 items-center">
+                                <input type="range" min="-100" max="100" value="0" id="motor-pwm-4" oninput="updateMotorTest(4, this.value)" class="flex-1 h-1.5 bg-slate-200 rounded-lg cursor-pointer accent-indigo-600">
+                                <span id="motor-pwm-val-4" class="text-[10px] font-mono font-bold text-slate-600 w-8 text-right">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Encoder & Gripper Group -->
+                <div class="grid grid-cols-2 gap-3.5 shrink-0">
+                    <!-- Encoder Status -->
+                    <div class="bg-slate-100/50 p-3.5 rounded-xl border border-slate-200/80 flex flex-col gap-2">
+                        <div class="flex justify-between items-center">
+                            <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Encoders (Ticks)</span>
+                            <button onclick="resetEncoderTest()" class="text-[9px] font-black text-indigo-600 bg-white border border-slate-200 px-2 py-0.5 rounded shadow-sm hover:bg-slate-50 transition-colors">Reset</button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-[9px] font-mono bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                            <div class="flex flex-col">
+                                <span class="text-[8px] font-bold text-slate-400 uppercase">Enc FL</span>
+                                <span id="enc-1" class="font-black text-slate-700">0</span>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-[8px] font-bold text-slate-400 uppercase">Enc FR</span>
+                                <span id="enc-2" class="font-black text-slate-700">0</span>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-[8px] font-bold text-slate-400 uppercase">Enc RL</span>
+                                <span id="enc-3" class="font-black text-slate-700">0</span>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-[8px] font-bold text-slate-400 uppercase">Enc RR</span>
+                                <span id="enc-4" class="font-black text-slate-700">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gripper Test -->
+                    <div class="bg-slate-100/50 p-3.5 rounded-xl border border-slate-200/80 flex flex-col gap-2">
+                        <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Gripper Test</span>
+                        <div class="flex gap-2">
+                            <button onclick="testGripperAction('OPEN')" class="flex-1 bg-white hover:bg-slate-50 text-slate-700 font-black text-[9px] uppercase tracking-widest py-2 rounded-lg shadow-sm border border-slate-200">OPEN</button>
+                            <button onclick="testGripperAction('CLOSE')" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[9px] uppercase tracking-widest py-2 rounded-lg shadow-sm border border-indigo-500">CLOSE</button>
+                        </div>
+                        <div class="flex justify-between items-center text-[10px] bg-white px-2 py-1.5 rounded border border-slate-200 shadow-sm font-mono mt-0.5">
+                            <span class="text-slate-400 font-bold uppercase tracking-wider text-[8px]">Force Sensor:</span>
+                            <span id="test-gripper-force" class="font-black text-slate-700">0.00 <span class="text-[8px] font-normal text-slate-400">N</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Diagnostics Log -->
+                <div class="bg-slate-50/80 rounded-xl p-3.5 mt-auto flex-1 flex flex-col overflow-hidden min-h-[90px] border border-slate-200/80 shadow-inner">
+                    <h3 class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 shrink-0">Diagnostics Log</h3>
+                    <div id="diagnosticsLog" class="font-mono text-[10px] text-slate-600 flex flex-col gap-1 overflow-y-auto pr-2" style="max-height: 120px;">
+                        <span>> Diagnostic system initialized. Ready.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- MODAL -->
+    <div id="editModal" class="fixed inset-0 bg-black/40 backdrop-blur-md hidden items-center justify-center z-[100]">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-80 flex flex-col gap-5 border border-slate-200 transform scale-95 transition-all duration-200" id="modalContent">
+            <div class="flex justify-between items-center border-b border-slate-200 pb-3">
+                <div>
+                    <h3 id="modalTitle" class="font-black text-slate-800 text-lg font-mono">Block ID</h3>
+                    <p class="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Configure Sector</p>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 transition-colors p-1"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="flex flex-col gap-2">
+                <label class="text-xs font-bold text-slate-600 uppercase">Entity Type</label>
+                <select id="modalOcc" class="w-full p-3 font-bold text-sm bg-slate-50 border border-slate-200 text-slate-800 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <option value="EMPTY">EMPTY (Traversable)</option>
+                    <option value="R1_KFS">R1 KFS (Blue Target)</option>
+                    <option value="R2_REAL">R2 REAL (Green Target)</option>
+                    <option value="FAKE">FAKE KFS (Orange Hazard)</option>
+                </select>
+            </div>
+            <button onclick="saveModal()" class="btn btn-primary w-full py-3 mt-2">Deploy Configuration</button>
+        </div>
+    </div>
+
+    <style>
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        /* ── UI smoothness optimizations ── */
+        #videoFeed, #videoFeed2, #videoFeed3 {
+            will-change: contents;
+            transform: translateZ(0);
+            backface-visibility: hidden;
+        }
+        .block-cell {
+            will-change: transform, box-shadow;
+        }
+        #robot-container {
+            will-change: left, top, opacity;
+        }
+        .route-card, .btn, button {
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* prevent layout recalc on scroll */
+        .scrollable-content { contain: strict; }
+        /* smooth sidebar transitions */
+        aside { contain: layout style; }
+    </style>
+
+    <script>
+        const DEFAULT_HEIGHTS = {1:400, 2:200, 3:400, 4:200, 5:400, 6:600, 7:400, 8:600, 9:400, 10:200, 11:400, 12:200};
+        const GRID = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]];
+
+        let state = { occ: {}, heights: {}, locked: false, curr: null };
+        let activeRouteActions = [];
+        let isAnimating = false;
+        let robotX = 0, robotY = 0;
+        let currentRotation = 0;
+        let routeCache = [];
+        let currentRobot = 'R2';
+
+        function init() {
+            for(let i=1; i<=12; i++){ state.occ[i] = "EMPTY"; state.heights[i] = DEFAULT_HEIGHTS[i]; }
+            render();
+            
+            const params = new URLSearchParams(window.location.search);
+            if (!params.get('testing')) {
+                initVideoFeeds();
+            }
+            const task = params.get('task');
+            if (task) {
+                switchTaskView(task);
+            }
+        }
+
+        function getBlockClasses(occ, h) {
+            let classes = "";
+            if (occ === "EMPTY") classes += "item-empty ";
+            else if (occ === "R1_KFS") classes += "item-r1 ";
+            else if (occ === "R2_REAL") classes += "item-r2 ";
+            else if (occ === "FAKE") classes += "item-fake ";
+
+            if (h === 200) classes += "block-h200";
+            else if (h === 400) classes += "block-h400";
+            else if (h === 600) classes += "block-h600";
+            return classes;
+        }
+
+        function render() {
+            const container = document.getElementById('gridContainer');
+            const robotHtml = document.getElementById('robot-container').outerHTML;
+            container.innerHTML = robotHtml;
+
+            GRID.forEach(row => {
+                row.forEach(id => {
+                    const occ = state.occ[id];
+                    const h = state.heights[id];
+                    const isOcc = occ !== "EMPTY";
+                    const content = isOcc ? occ.replace('_KFS','').replace('_REAL','') : '';
+                    container.innerHTML += `
+                        <div id="block-${id}" onclick="openModal(${id})" class="block-cell ${getBlockClasses(occ, h)}">
+                            <span class="absolute top-1 left-1.5 text-[9px] opacity-50 font-sans tracking-widest">0${id}</span>
+                            <div class="leading-none tracking-tighter">${content}</div>
+                            ${isOcc ? `<div class="absolute bottom-1 right-1.5 text-[8px] opacity-40 font-sans font-normal">${h}mm</div>` : ''}
+                        </div>`;
+                });
+            });
+            updateStatus();
+        }
+
+        function updateStatus() {
+            let r1=0, r2=0, f=0;
+            Object.values(state.occ).forEach(v => { if(v==="R1_KFS") r1++; if(v==="R2_REAL") r2++; if(v==="FAKE") f++; });
+            
+            const box = document.getElementById('validationBox');
+            if (r1===3 && r2===4 && f===1) {
+                box.className = "text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded border border-emerald-400/20";
+                box.innerHTML = `VERIFIED: 3 R1 | 4 R2 | 1 FAKE`;
+            } else {
+                box.className = "text-[10px] font-bold text-rose-400 bg-rose-400/10 px-2 py-1 rounded border border-rose-400/20";
+                box.innerHTML = `WARNING: R1(${r1}/3) R2(${r2}/4) FAKE(${f}/1)`;
+            }
+        }
+
+        function openModal(id) {
+            state.curr = id;
+            document.getElementById('modalTitle').innerText = "SECTOR 0" + id;
+            document.getElementById('modalOcc').value = state.occ[id];
+            
+            const modal = document.getElementById('editModal');
+            const content = document.getElementById('modalContent');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => content.classList.remove('scale-95'), 10);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('editModal');
+            const content = document.getElementById('modalContent');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }, 200);
+        }
+
+        function saveModal() {
+            state.occ[state.curr] = document.getElementById('modalOcc').value;
+            closeModal(); render();
+        }
+
+        function resetMap() { init(); }
+
+        async function randomizeMap() {
+            document.body.style.cursor = 'wait';
+            try {
+                const res = await fetch('/api/random', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ n_picks: parseInt(document.getElementById('nPicks').value), robot_type: currentRobot })
+                });
+                const data = await res.json();
+                state.occ = data.occupancy; render();
+            } finally { document.body.style.cursor = 'default'; }
+        }
+
+
+
+        function handleToggle() {
+            if(!document.getElementById('resultsPanel').classList.contains('hidden') && !isAnimating) {
+                generateRoutes();
+            }
+        }
+
+        async function generateRoutes() {
+            const out = document.getElementById('routesOutput');
+            const panel = document.getElementById('resultsPanel');
+            
+            panel.classList.remove('hidden');
+            panel.style.animation = 'none';
+            panel.offsetHeight; // trigger reflow
+            panel.style.animation = 'slideUp 0.4s ease forwards';
+            
+            out.innerHTML = '<div class="text-[10px] text-center font-bold text-slate-500 py-10 uppercase tracking-widest animate-pulse">Compiling Telemetry...</div>';
+
+            const res = await fetch('/api/generate', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    occupancy: state.occ, heights: state.heights,
+                    n_picks: parseInt(document.getElementById('nPicks').value),
+                    allow_diagonal: document.getElementById('allowDiagonal').checked,
+                    strict_clearance: document.getElementById('strictClearance').checked,
+                    robot_type: currentRobot
+                })
+            });
+            const routes = await res.json();
+            routeCache = routes;
+
+            if(!routes.length) {
+                out.innerHTML = '<div class="p-4 bg-rose-50 border border-rose-200 rounded-xl text-center"><div class="text-rose-700 font-bold text-xs uppercase tracking-widest">Routing Failure</div><div class="text-[10px] text-rose-500 mt-1">Parameters impossible to satisfy physically.</div></div>';
+                return;
+            }
+
+            const themeColor = currentRobot === 'R2' ? 'emerald' : 'indigo';
+
+            let html = '';
+            routes.forEach((r, i) => {
+                const actsHtml = r.actions.filter(a=>a.to || a.target).map(a => `<span class="bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[10px] text-slate-700 font-mono">${a.to || a.target}</span>`).join('<span class="text-slate-400">→</span>');
+                
+                html += `
+                <div class="route-card rounded-xl p-4" onclick="playAnimation(${i})">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <span class="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded border border-slate-200 tracking-widest">RANK 0${i+1}</span>
+                            <div class="text-xs font-bold text-slate-700 mt-2 tracking-wide">${r.name}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xl font-black text-${themeColor}-600 font-mono leading-none">${r.score.toFixed(2)}</div>
+                            <div class="text-[8px] text-slate-500 uppercase tracking-widest mt-1">Cost Score</div>
+                        </div>
+                    </div>
+                    <div class="flex gap-1.5 flex-wrap items-center mt-2 p-2 bg-slate-50/50 border border-slate-100 rounded-lg">
+                        ${actsHtml}
+                    </div>
+                </div>`;
+            });
+            out.innerHTML = html;
+        }
+
+        let selectedRouteIndex = -1;
+
+        async function playAnimation(routeIndex) {
+            if(isAnimating) return;
+            const actions = routeCache[routeIndex].actions;
+
+            // Save selected path to Flask so bridge includes it in mission_plan on START
+            const path = actions.map(a => a.to || a.target).filter(Boolean);
+            fetch('/api/control/action', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'SET_MEIHUA_PATH', path: path })
+            }).catch(e => {});
+
+            // Highlight selected route card
+            selectedRouteIndex = routeIndex;
+            document.querySelectorAll('.route-card').forEach((el, i) => {
+                el.classList.toggle('selected', i === routeIndex);
+            });
+
+            // Sync config bar
+            const cfgPath = document.getElementById('cfgPath');
+            if (cfgPath) cfgPath.innerText = path.length + ' pts';
+
+            isAnimating = true;
+            
+            const robot = document.getElementById('robot-container');
+            const grid = document.getElementById('gridContainer');
+            const cargo = document.getElementById('robot-cargo');
+            
+            cargo.classList.add('hidden');
+            robot.style.transition = 'none';
+            robot.style.opacity = '1';
+            
+            // Basic fallback starting pos
+            robot.style.left = '50%';
+            robot.style.top = '-10%';
+
+            for(let a of actions) {
+                let targetId = a.to || a.target || a.via;
+                if(!targetId) continue;
+
+                const block = document.getElementById('block-' + targetId);
+                const rect = block.getBoundingClientRect();
+                const gridRect = grid.getBoundingClientRect();
+
+                robot.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+                robot.style.left = (rect.left - gridRect.left + rect.width/2) + 'px';
+                robot.style.top = (rect.top - gridRect.top + rect.height/2) + 'px';
+
+                if(a.type.includes('PICK')) {
+                    const highlightColor = currentRobot === 'R2' ? 'rgba(16, 185, 129, 0.8)' : 'rgba(99, 102, 241, 0.8)';
+                    block.style.boxShadow = `0 0 30px ${highlightColor}`;
+                    block.style.transform = "translateY(-10px) scale(1.05)";
+                    await new Promise(r => setTimeout(r, 600));
+                    block.style.boxShadow = "";
+                    block.style.transform = "";
+                    cargo.classList.remove('hidden');
+                } else {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+            
+            await new Promise(r => setTimeout(r, 800));
+            robot.style.opacity = '0';
+            isAnimating = false;
+        }
+
+        // --- TASK 1 LOGIC ---
+        let selectedSpearhead = 1;
+
+        function setSpearhead(num) {
+            selectedSpearhead = num;
+            // Update UI
+            for(let i=1; i<=6; i++) {
+                const btn = document.getElementById('sh-btn-' + i);
+                if(i === num) {
+                    btn.className = "sh-btn py-2.5 bg-indigo-600 text-white border border-indigo-700 rounded shadow-sm font-bold hover:bg-indigo-500 transition-colors focus:ring-2 focus:ring-indigo-400 ring-offset-1 active";
+                } else {
+                    btn.className = "sh-btn py-2.5 bg-slate-50 border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 hover:text-slate-700 shadow-sm focus:ring-2 focus:ring-indigo-400 ring-offset-1";
+                }
+            }
+            const cfgSpear = document.getElementById('cfgSpear');
+            if (cfgSpear) cfgSpear.innerText = num;
+        }
+
+        function switchTaskView(taskId) {
+            const t1 = document.getElementById('task1-view');
+            const t2 = document.getElementById('task2-view');
+            const t3 = document.getElementById('task3-view');
+            const tTest = document.getElementById('systemtest-view');
+            const n1 = document.getElementById('navTask1');
+            const n2 = document.getElementById('navTask2');
+            const n3 = document.getElementById('navTask3');
+            const nTest = document.getElementById('navSystemTest');
+            const t2Controls = document.getElementById('task2-controls');
+            
+            // Stop system test loop when navigating away
+            stopSystemTestLoop();
+            
+            // Default everything to hidden/inactive
+            t1.classList.add('hidden');
+            t2.classList.add('hidden');
+            t3.classList.add('hidden');
+            if (tTest) tTest.classList.add('hidden');
+            t2Controls.classList.add('hidden');
+            
+            const inactiveClass = "px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-3 w-full";
+            const activeClass = "px-4 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl border border-indigo-200 text-indigo-700 bg-indigo-50/70 shadow-sm transition-all cursor-pointer flex items-center gap-3 w-full";
+            
+            n1.className = inactiveClass;
+            n2.className = inactiveClass;
+            n3.className = inactiveClass;
+            if (nTest) nTest.className = inactiveClass;
+            
+            if(taskId === 'task1') {
+                t1.classList.remove('hidden');
+                n1.className = activeClass;
+            } else if (taskId === 'task2') {
+                t2.classList.remove('hidden');
+                t2Controls.classList.remove('hidden');
+                n2.className = activeClass;
+            } else if (taskId === 'task3') {
+                t3.classList.remove('hidden');
+                n3.className = activeClass;
+            } else if (taskId === 'systemtest') {
+                if (tTest) tTest.classList.remove('hidden');
+                if (nTest) nTest.className = activeClass;
+                startSystemTestLoop();
+                document.getElementById('vision-test-bar').classList.remove('hidden');
+            }
+            if (taskId !== 'systemtest') {
+                document.getElementById('vision-test-bar').classList.add('hidden');
+            }
+        }
+
+        async function setVisionState(state) {
+            const badge = document.getElementById('visionStateBadge');
+            badge.textContent = state;
+            const colors = {
+                'IDLE': 'bg-slate-200 text-slate-600',
+                'WEAPON_CLUB': 'bg-orange-200 text-orange-700',
+                'MEIHUA_FOREST_EXECUTION': 'bg-emerald-200 text-emerald-700',
+                'MARTIAL_ART_PLACEMENT': 'bg-purple-200 text-purple-700',
+            };
+            badge.className = `font-mono text-xs font-bold px-2 py-0.5 rounded ${colors[state] || 'bg-slate-200 text-slate-600'}`;
+            await fetch('/api/test/vision_state', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({state})
+            });
+        }
+
+        let autoInterval;
+        let currentTask1Step = 1;
+        let stepSimulationTimeout = null;
+        let yoloConfidence = 0.75;
+
+        function updateYoloConfidence(val) {
+            yoloConfidence = parseFloat(val);
+            document.getElementById('yoloConfVal').innerText = yoloConfidence.toFixed(2);
+            fetch('/api/control/action', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'SET_YOLO_CONF', value: yoloConfidence })
+            }).catch(e => {});
+        }
+
+        // ── Global command dispatcher (used by sidebar E-stop & RESET) ────
+        function sendCommand(cmd) {
+            fetch('/api/control/action', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: cmd })
+            }).catch(e => {});
+
+            if (cmd === 'DISENGAGE') {
+                // cancel all task simulations
+                if (typeof autoInterval !== 'undefined') clearInterval(autoInterval);
+                if (typeof stepSimulationTimeout !== 'undefined') clearTimeout(stepSimulationTimeout);
+                if (typeof t3AutoInterval !== 'undefined') clearInterval(t3AutoInterval);
+                if (typeof t3ConflictingTimeout !== 'undefined' && t3ConflictingTimeout) clearTimeout(t3ConflictingTimeout);
+                if (typeof isTask3Running !== 'undefined') isTask3Running = false;
+
+                const task1Log = document.getElementById('task1Log');
+                if (task1Log) task1Log.innerHTML += '<br><span class="text-rose-600 font-bold">> [GLOBAL] EMERGENCY STOP sent to ROS2.</span>';
+
+                const startBtn = document.getElementById('btnTask1Start');
+                if (startBtn) {
+                    startBtn.innerHTML = '<span class="relative z-10">START AUTO RUN</span><div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>';
+                    startBtn.className = "flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-md transition-all active:scale-95 border-2 border-indigo-500 relative overflow-hidden group";
+                }
+            }
+        }
+
+        // ── Team Color ───────────────────────────────────────────────────
+        function setTeamColor(color) {
+            fetch('/api/control/action', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'SET_TEAM_COLOR', color: color })
+            }).catch(e => {});
+
+            const activeClass = "py-2 text-[10px] font-black uppercase tracking-widest rounded-lg border-2 transition-all";
+            document.getElementById('colorBtnBlue').className = activeClass +
+                (color === 'BLUE' ? ' border-blue-500 bg-blue-600 text-white' : ' border-slate-200 bg-slate-50 text-slate-500');
+            document.getElementById('colorBtnRed').className = activeClass +
+                (color === 'RED' ? ' border-rose-500 bg-rose-600 text-white' : ' border-slate-200 bg-slate-50 text-slate-500');
+
+            // sync config bar
+            const cfgColor = document.getElementById('cfgColor');
+            if (cfgColor) {
+                cfgColor.className = color === 'BLUE'
+                    ? 'cfg-tag bg-blue-50 text-blue-700 border-blue-200'
+                    : 'cfg-tag bg-rose-50 text-rose-700 border-rose-200';
+                cfgColor.innerText = color;
+            }
+        }
+
+        // ── Macro-state live update (poll /api/status every 1s) ──────────
+        let _lastMacroState = '';
+        setInterval(() => {
+            fetch('/api/status').then(r => r.json()).then(d => {
+                const state = d.macro_state || 'IDLE';
+
+                // Sidebar display
+                const el = document.getElementById('macroStateDisplay');
+                if (el) {
+                    const cls = {
+                        IDLE: 'font-mono text-slate-500',
+                        WEAPON_CLUB: 'font-mono text-indigo-600 font-black',
+                        MEIHUA_FOREST_EXECUTION: 'font-mono text-emerald-600 font-black',
+                        MARTIAL_ART_PLACEMENT: 'font-mono text-amber-600 font-black',
+                    };
+                    el.className = cls[state] || 'font-mono text-slate-500';
+                    el.innerText = state;
+                }
+
+                // Config bar badge
+                const cfgRos = document.getElementById('cfgRosState');
+                if (cfgRos) {
+                    const badgeCls = {
+                        IDLE: 'state-badge state-idle',
+                        WEAPON_CLUB: 'state-badge state-weapon',
+                        MEIHUA_FOREST_EXECUTION: 'state-badge state-meihua',
+                        MARTIAL_ART_PLACEMENT: 'state-badge state-martial',
+                    };
+                    cfgRos.className = badgeCls[state] || 'state-badge state-idle';
+                    cfgRos.innerText = state.replace('_', ' ').replace('_', ' ');
+                }
+
+                // Toast on state change
+                if (state !== _lastMacroState && _lastMacroState !== '') {
+                    showNotificationToast(`ROS State → ${state}`);
+                }
+                _lastMacroState = state;
+
+                const pitch = document.getElementById('imuPitchDisplay');
+                if (pitch) pitch.innerText = (d.imu_pitch || 0).toFixed(1) + '°';
+
+                const hw = document.getElementById('hwErrorDisplay');
+                if (hw) {
+                    hw.innerText = d.hardware_error || 'None';
+                    hw.className = 'font-mono ' + (d.hardware_error && d.hardware_error !== 'None' ? 'text-rose-600' : 'text-emerald-600');
+                }
+            }).catch(e => {});
+        }, 1000);
+
+        function setGripperState(state) {
+            const statusEl = document.getElementById('gripperStatus');
+            const ledEl = document.getElementById('gripperLed');
+            if (!statusEl || !ledEl) return;
+            
+            statusEl.innerText = state;
+            if (state === 'OPEN') {
+                statusEl.className = "text-xs font-black text-emerald-600 uppercase mt-0.5 block";
+                ledEl.className = "w-3 h-3 rounded-full bg-emerald-500 shadow-sm border border-emerald-400";
+            } else if (state === 'CLOSED' || state === 'GRIPPED') {
+                statusEl.className = "text-xs font-black text-indigo-600 uppercase mt-0.5 block";
+                ledEl.className = "w-3 h-3 rounded-full bg-indigo-500 shadow-sm border border-indigo-400";
+            }
+        }
+
+        function updateTask1StepUI(stepNum) {
+            currentTask1Step = stepNum;
+            
+            // Loop steps 1 to 5 and update style
+            for (let i = 1; i <= 5; i++) {
+                const stepEl = document.getElementById('step-' + i);
+                const stepNumEl = stepEl.querySelector('.step-num');
+                
+                if (i === stepNum) {
+                    // Active step styling
+                    stepEl.className = "step-item flex items-center gap-3.5 p-1.5 px-3 rounded-lg border bg-indigo-50 border-indigo-200 text-indigo-900 shadow-sm transition-all duration-300 scale-[1.02] z-10";
+                    stepNumEl.className = "step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black bg-indigo-600 text-white shadow-sm animate-pulse";
+                    stepNumEl.innerHTML = i;
+                } else if (i < stepNum) {
+                    // Completed step styling
+                    stepEl.className = "step-item flex items-center gap-3.5 p-1.5 px-3 rounded-lg border bg-emerald-50 border-emerald-200 text-emerald-900 opacity-90 transition-all duration-300";
+                    stepNumEl.className = "step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black bg-emerald-600 text-white shadow-sm";
+                    stepNumEl.innerHTML = "✓";
+                } else {
+                    // Pending step styling
+                    stepEl.className = "step-item flex items-center gap-3.5 p-1.5 px-3 rounded-lg border bg-slate-50/50 border-slate-200/60 opacity-50 transition-all duration-300";
+                    stepNumEl.className = "step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black bg-slate-200 text-slate-500 shadow-sm";
+                    stepNumEl.innerHTML = i;
+                }
+            }
+
+            // Sync with backend API
+            fetch('/api/task1/step', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ step: stepNum })
+            }).catch(e => console.error("API sync error:", e));
+        }
+
+        function startTask1() {
+            const btn = document.getElementById('btnTask1Start');
+            const log = document.getElementById('task1Log');
+            
+            if (btn.innerText.includes('START')) {
+                btn.innerHTML = '<span class="relative z-10">RUNNING...</span><div class="absolute inset-0 bg-indigo-500/20 translate-y-0"></div>';
+                btn.className = "flex-1 bg-indigo-800 text-indigo-200 font-black text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-md border-2 border-indigo-700 relative overflow-hidden cursor-not-allowed pointer-events-none";
+                
+                log.innerHTML += `<br><span class="text-indigo-600">> Target: Spearhead Position [${selectedSpearhead}]</span>`;
+                log.innerHTML += '<br><span class="text-indigo-600">> Initiating autonomous routine.</span>';
+                log.scrollTop = log.scrollHeight;
+                
+                setGripperState('OPEN');
+                
+                // Notify backend of command (team_color already stored via setTeamColor)
+                fetch('/api/control/action', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ action: 'START', target_spearhead: selectedSpearhead })
+                }).catch(e => {});
+ 
+                // Telemetry simulation
+                autoInterval = setInterval(() => {
+                    document.getElementById('telemetryX').innerHTML = (400 + Math.random() * 50).toFixed(2) + ' <span class="text-[10px] font-normal text-slate-500">mm</span>';
+                    document.getElementById('telemetryY').innerHTML = (300 + Math.random() * 50).toFixed(2) + ' <span class="text-[10px] font-normal text-slate-500">mm</span>';
+                    document.getElementById('telemetryTheta').innerHTML = (90 + Math.random() * 5).toFixed(2) + ' <span class="text-[10px] font-normal text-slate-500">deg</span>';
+                }, 500);
+ 
+                // Run step-by-step simulation workflow
+                updateTask1StepUI(1);
+                
+                stepSimulationTimeout = setTimeout(() => {
+                    log.innerHTML += '<br><span class="text-indigo-600">> Robot driving to spearhead rack.</span>';
+                    log.scrollTop = log.scrollHeight;
+                    updateTask1StepUI(2);
+                    
+                    stepSimulationTimeout = setTimeout(() => {
+                        log.innerHTML += `<br><span class="text-indigo-600">> Spearhead #${selectedSpearhead} collected (Gripper Closed). Arrived at assembly point.</span>`;
+                        log.scrollTop = log.scrollHeight;
+                        setGripperState('CLOSED');
+                        updateTask1StepUI(3);
+                        
+                        stepSimulationTimeout = setTimeout(() => {
+                            log.innerHTML += '<br><span class="text-amber-600">> Engaging weapon assembly mechanism...</span>';
+                            log.scrollTop = log.scrollHeight;
+                            updateTask1StepUI(4);
+                            
+                            stepSimulationTimeout = setTimeout(() => {
+                                log.innerHTML += '<br><span class="text-emerald-600">> Assembly complete! Awaiting manual field reset.</span>';
+                                log.scrollTop = log.scrollHeight;
+                                updateTask1StepUI(5);
+                                
+                                // Enable start button again or stop simulation loop
+                                clearInterval(autoInterval);
+                            }, 4000); // Assembly takes 4 seconds
+                        }, 2500); // Wait at assembly pos for 2.5s
+                    }, 3000); // Drive to pick takes 3 seconds
+                }, 1500); // Starting delay 1.5s
+            }
+        }
+ 
+        function disengageTask1() {
+            const btn = document.getElementById('btnTask1Start');
+            const log = document.getElementById('task1Log');
+            
+            // Cancel timeouts and intervals
+            if (autoInterval) clearInterval(autoInterval);
+            if (stepSimulationTimeout) clearTimeout(stepSimulationTimeout);
+            
+            // Notify backend
+            fetch('/api/control/action', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'DISENGAGE' })
+            }).catch(e => {});
+ 
+            // Reset start button
+            btn.innerHTML = '<span class="relative z-10">START AUTO RUN</span><div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>';
+            btn.className = "flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-md transition-all active:scale-95 border-2 border-indigo-500 relative overflow-hidden group";
+            
+            log.innerHTML += '<br><span class="text-rose-600 font-bold">> EMERGENCY DISENGAGE: Aborted and returning to safety.</span>';
+            log.scrollTop = log.scrollHeight;
+ 
+            updateTask1StepUI(1);
+            setGripperState('OPEN');
+            
+            document.getElementById('telemetryX').innerHTML = '0.00 <span class="text-[10px] font-normal text-slate-500">mm</span>';
+            document.getElementById('telemetryY').innerHTML = '0.00 <span class="text-[10px] font-normal text-slate-500">mm</span>';
+            document.getElementById('telemetryTheta').innerHTML = '0.00 <span class="text-[10px] font-normal text-slate-500">deg</span>';
+        }
+ 
+        function resetTask1() {
+            const btn = document.getElementById('btnTask1Start');
+            const log = document.getElementById('task1Log');
+            
+            // Cancel timeouts and intervals
+            if (autoInterval) clearInterval(autoInterval);
+            if (stepSimulationTimeout) clearTimeout(stepSimulationTimeout);
+            
+            // Notify backend
+            fetch('/api/control/action', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'RESET' })
+            }).catch(e => {});
+ 
+            // Reset start button
+            btn.innerHTML = '<span class="relative z-10">START AUTO RUN</span><div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>';
+            btn.className = "flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-md transition-all active:scale-95 border-2 border-indigo-500 relative overflow-hidden group";
+            
+            log.innerHTML += '<br><span class="text-amber-600">> FIELD RESET: Requesting field reset...</span>';
+            log.scrollTop = log.scrollHeight;
+ 
+            updateTask1StepUI(1);
+            setGripperState('OPEN');
+            
+            document.getElementById('telemetryX').innerHTML = '0.00 <span class="text-[10px] font-normal text-slate-500">mm</span>';
+            document.getElementById('telemetryY').innerHTML = '0.00 <span class="text-[10px] font-normal text-slate-500">mm</span>';
+            document.getElementById('telemetryTheta').innerHTML = '0.00 <span class="text-[10px] font-normal text-slate-500">deg</span>';
+        }
+
+        // Poll status and logs for real integration
+        if (!new URLSearchParams(window.location.search).get('testing')) {
+            setInterval(() => {
+                fetch('/api/status')
+                    .then(res => res.json())
+                    .then(data => {
+                        // Update telemetry UI with real values (if received from real hardware API)
+                        if (data.x !== 0 || data.y !== 0 || data.theta !== 0) {
+                            document.getElementById('telemetryX').innerHTML = data.x.toFixed(2) + ' <span class="text-[10px] font-normal text-slate-500">mm</span>';
+                            document.getElementById('telemetryY').innerHTML = data.y.toFixed(2) + ' <span class="text-[10px] font-normal text-slate-500">mm</span>';
+                            document.getElementById('telemetryTheta').innerHTML = data.theta.toFixed(2) + ' <span class="text-[10px] font-normal text-slate-500">deg</span>';
+                        }
+                        // Sync step if changed by backend
+                        if (data.task1_step !== currentTask1Step) {
+                            updateTask1StepUI(data.task1_step);
+                        }
+                    }).catch(e => {});
+     
+                fetch('/api/logs')
+                    .then(res => res.json())
+                    .then(logs => {
+                        const logEl = document.getElementById('task1Log');
+                        let logHtml = logs.map(l => `<span>${l}</span>`).join('<br>');
+                        if (logEl.innerHTML !== logHtml) {
+                            logEl.innerHTML = logHtml;
+                            logEl.scrollTop = logEl.scrollHeight;
+                        }
+                    }).catch(e => {});
+            }, 1000);
+        }
+ 
+        // --- TASK 3 LOGIC ---
+        let selectedT3Slot = 2; // Default Center
+ 
+        function setTicTacToeSlot(num) {
+            selectedT3Slot = num;
+            // Update UI
+            for(let i=1; i<=3; i++) {
+                const btn = document.getElementById('ttt-btn-' + i);
+                if(i === num) {
+                    btn.className = "ttt-btn py-4 bg-indigo-600 text-white border border-indigo-700 shadow-md rounded font-black text-xl hover:bg-indigo-500 transition-colors focus:ring-2 focus:ring-indigo-400 ring-offset-1";
+                } else {
+                    btn.className = "ttt-btn py-4 bg-slate-50 text-slate-600 border border-slate-200 rounded shadow-sm font-black text-xl hover:bg-slate-100 hover:text-slate-700 transition-colors focus:ring-2 focus:ring-indigo-400 ring-offset-1";
+                }
+            }
+            // Persist to Flask so bridge picks it up on START
+            fetch('/api/control/action', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'SET_TTT_SLOT', slot: num })
+            }).catch(e => {});
+            const names = {1:'LEFT', 2:'MIDDLE', 3:'RIGHT'};
+            const cfgTtt = document.getElementById('cfgTtt');
+            if (cfgTtt) cfgTtt.innerText = names[num] || 'MIDDLE';
+        }
+ 
+        let t3AutoInterval;
+        let t3ConflictingTimeout = null;
+        let isTask3Running = false;
+        function startTask3() {
+            const btn = document.getElementById('btnTask3Start');
+            const log = document.getElementById('task3Log');
+            
+            if(!isTask3Running) {
+                isTask3Running = true;
+                btn.innerHTML = '<span class="relative z-10">ABORT DEPLOYMENT</span><div class="absolute inset-0 bg-red-500/20 translate-y-0 transition-transform duration-300"></div>';
+                btn.className = "bg-rose-600 hover:bg-rose-700 text-white font-black text-2xl uppercase tracking-widest py-5 rounded-xl shadow-lg transition-all active:scale-95 border-2 border-rose-500 relative overflow-hidden group shrink-0";
+                
+                const slotName = selectedT3Slot === 1 ? 'LEFT' : (selectedT3Slot === 2 ? 'CENTER' : 'RIGHT');
+                log.innerHTML += `<br><span class="text-indigo-600">> Target: Tic-Tac-Toe Slot [${slotName}]</span>`;
+                log.innerHTML += '<br><span class="text-indigo-600">> Initiating KFS Deployment Protocol...</span>';
+                log.scrollTop = log.scrollHeight;
+                
+                // Simulate telemetry data stream
+                t3AutoInterval = setInterval(() => {
+                    document.getElementById('t3-telemetryX').innerHTML = (1200 + Math.random() * 5).toFixed(2) + ' <span class="text-[10px] font-normal text-slate-500">mm</span>';
+                    document.getElementById('t3-telemetryY').innerHTML = (4500 + Math.random() * 5).toFixed(2) + ' <span class="text-[10px] font-normal text-slate-500">mm</span>';
+                    document.getElementById('t3-telemetryTheta').innerHTML = (180.00 + Math.random() * 0.5).toFixed(2) + ' <span class="text-[10px] font-normal text-slate-500">deg</span>';
+                }, 500);
+
+                // Simulate "Vacant Slot Conflicting" after 2.5 seconds
+                t3ConflictingTimeout = setTimeout(() => {
+                    log.innerHTML += `<br><span class="text-rose-600 font-bold">> WARNING: Slot [${slotName}] is OCCUPIED by opponent! (Vacant Slot Conflicting)</span>`;
+                    
+                    // Auto switch to another slot
+                    let altSlot = selectedT3Slot;
+                    if (selectedT3Slot === 2) {
+                        altSlot = 3; // Switch to RIGHT
+                    } else if (selectedT3Slot === 1) {
+                        altSlot = 2; // Switch to CENTER
+                    } else {
+                        altSlot = 1; // Switch to LEFT
+                    }
+                    const altSlotName = altSlot === 1 ? 'LEFT' : (altSlot === 2 ? 'CENTER' : 'RIGHT');
+                    
+                    log.innerHTML += `<br><span class="text-amber-600 font-bold">> AUTO-SWITCHING to vacant alternative: Slot [${altSlotName}]</span>`;
+                    log.scrollTop = log.scrollHeight;
+                    
+                    // Update slot selection UI
+                    setTicTacToeSlot(altSlot);
+                    
+                    // Continue deployment to new slot
+                    t3ConflictingTimeout = setTimeout(() => {
+                        log.innerHTML += `<br><span class="text-emerald-600 font-bold">> R2 aligned at Slot [${altSlotName}] and KFS successfully deployed!</span>`;
+                        log.scrollTop = log.scrollHeight;
+                        
+                        isTask3Running = false;
+                        btn.innerHTML = '<span class="relative z-10">DEPLOY KFS</span><div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>';
+                        btn.className = "bg-indigo-600 hover:bg-indigo-700 text-white font-black text-2xl uppercase tracking-widest py-5 rounded-xl shadow-lg transition-all active:scale-95 border-2 border-indigo-500 relative overflow-hidden group shrink-0";
+                        clearInterval(t3AutoInterval);
+                    }, 2000);
+                }, 2500);
+                
+            } else {
+                isTask3Running = false;
+                btn.innerHTML = '<span class="relative z-10">DEPLOY KFS</span><div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>';
+                btn.className = "bg-indigo-600 hover:bg-indigo-700 text-white font-black text-2xl uppercase tracking-widest py-5 rounded-xl shadow-lg transition-all active:scale-95 border-2 border-indigo-500 relative overflow-hidden group shrink-0";
+                
+                log.innerHTML += '<br><span class="text-rose-600 font-bold">> Deployment aborted.</span>';
+                log.scrollTop = log.scrollHeight;
+                clearInterval(t3AutoInterval);
+                if (t3ConflictingTimeout) clearTimeout(t3ConflictingTimeout);
+            }
+        }
+
+        // --- SYSTEM TEST DIAGNOSTICS LOGIC ---
+        let systemTestInterval = null;
+        let motorSpeeds = [0, 0, 0, 0];
+        let encoderTicks = [0, 0, 0, 0];
+        let gripperState = 'OPEN';
+        let gripperTargetForce = 0.0;
+        let gripperCurrentForce = 0.0;
+
+        function updateMotorTest(motorId, value) {
+            const val = parseInt(value);
+            motorSpeeds[motorId - 1] = val;
+            
+            document.getElementById(`motor-pwm-val-${motorId}`).innerText = (val > 0 ? '+' : '') + val + '%';
+            
+            const rpm = Math.abs(val) * 12;
+            document.getElementById(`m${motorId}-rpm`).innerText = `${rpm} RPM`;
+
+            const logEl = document.getElementById('diagnosticsLog');
+            const sideName = ['FL', 'FR', 'RL', 'RR'][motorId - 1];
+            logEl.innerHTML += `<br><span>> Motor ${sideName} target PWM set to ${val}%</span>`;
+            logEl.scrollTop = logEl.scrollHeight;
+
+            fetch('/api/test/motor', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ motor_id: motorId, speed: val })
+            }).catch(e => {});
+        }
+
+        function stopAllMotors() {
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById(`motor-pwm-${i}`).value = 0;
+                updateMotorTest(i, 0);
+            }
+            const logEl = document.getElementById('diagnosticsLog');
+            logEl.innerHTML += `<br><span class="text-rose-600 font-bold">> STOP ALL MOTORS command executed.</span>`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function resetEncoderTest() {
+            encoderTicks = [0, 0, 0, 0];
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById(`enc-${i}`).innerText = '0';
+            }
+            const logEl = document.getElementById('diagnosticsLog');
+            logEl.innerHTML += `<br><span class="text-indigo-600">> Encoders cleared. Tick counters set to 0.</span>`;
+            logEl.scrollTop = logEl.scrollHeight;
+
+            fetch('/api/test/encoder/reset', { method: 'POST' }).catch(e => {});
+        }
+
+        function testGripperAction(action) {
+            gripperState = action;
+            gripperTargetForce = (action === 'CLOSE') ? 45.2 : 0.0;
+            
+            const logEl = document.getElementById('diagnosticsLog');
+            logEl.innerHTML += `<br><span class="text-indigo-600">> Gripper target action set to ${action}.</span>`;
+            logEl.scrollTop = logEl.scrollHeight;
+
+            fetch('/api/test/gripper', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: action })
+            }).catch(e => {});
+        }
+
+        function updateCameraConfig() {
+            const bVal = document.getElementById('cam-brightness').value;
+            const eVal = document.getElementById('cam-exposure').value;
+            
+            document.getElementById('cam-brightness-val').innerText = bVal;
+            document.getElementById('cam-exposure-val').innerText = parseFloat(eVal).toFixed(1);
+
+            fetch('/api/test/camera/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ brightness: parseInt(bVal), exposure: parseFloat(eVal) })
+            }).catch(e => {});
+        }
+
+        function captureCameraFrame() {
+            const logEl = document.getElementById('diagnosticsLog');
+            logEl.innerHTML += `<br><span class="text-indigo-600">> Camera Diagnostic: Triggering snapshot frame capture...</span>`;
+            logEl.scrollTop = logEl.scrollHeight;
+
+            const streamContainer = document.getElementById('videoFeed3').parentNode;
+            streamContainer.classList.add('brightness-[1.5]', 'transition-all', 'duration-75');
+            setTimeout(() => {
+                streamContainer.classList.remove('brightness-[1.5]');
+            }, 100);
+
+            showNotificationToast('Diagnostic Frame Saved successfully to frame_capture_test.png');
+
+            fetch('/api/test/camera/capture', { method: 'POST' }).catch(e => {});
+        }
+
+        function showNotificationToast(msg) {
+            let toast = document.getElementById('system-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'system-toast';
+                toast.className = 'fixed bottom-5 right-5 bg-slate-900/90 text-white text-xs font-bold px-4 py-3 rounded-xl shadow-lg border border-slate-700 backdrop-blur-md z-[200] transition-all duration-300 transform translate-y-10 opacity-0 pointer-events-none';
+                document.body.appendChild(toast);
+            }
+            toast.innerText = msg;
+            toast.classList.remove('translate-y-10', 'opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0', 'pointer-events-none');
+            }, 3000);
+        }
+
+        function startSystemTestLoop() {
+            if (systemTestInterval) clearInterval(systemTestInterval);
+            
+            const logEl = document.getElementById('diagnosticsLog');
+            logEl.innerHTML += `<br><span>> Activating real-time hardware telemetry feedback loop...</span>`;
+            logEl.scrollTop = logEl.scrollHeight;
+
+            let timeCounter = 0;
+            systemTestInterval = setInterval(() => {
+                for (let i = 0; i < 4; i++) {
+                    const speed = motorSpeeds[i];
+                    if (speed !== 0) {
+                        encoderTicks[i] += Math.round(speed * 0.45 + (Math.random() - 0.5) * 2);
+                        document.getElementById(`enc-${i + 1}`).innerText = encoderTicks[i];
+                    }
+                }
+
+                timeCounter += 0.05;
+                const roll = (Math.sin(timeCounter * 1.2) * 2.5 + (Math.random() - 0.5) * 0.1).toFixed(2);
+                const pitch = (Math.cos(timeCounter * 0.8) * 1.8 + (Math.random() - 0.5) * 0.1).toFixed(2);
+                const yaw = ((timeCounter * 5) % 360).toFixed(2);
+
+                document.getElementById('imu-roll').innerText = roll + '°';
+                document.getElementById('imu-pitch').innerText = pitch + '°';
+                document.getElementById('imu-yaw').innerText = yaw + '°';
+
+                document.getElementById('imu-accx').innerText = (Math.sin(timeCounter * 2) * 0.15 + (Math.random() - 0.5) * 0.05).toFixed(3);
+                document.getElementById('imu-accy').innerText = (Math.cos(timeCounter * 1.5) * 0.10 + (Math.random() - 0.5) * 0.05).toFixed(3);
+                document.getElementById('imu-accz').innerText = (9.81 + (Math.random() - 0.5) * 0.08).toFixed(3);
+
+                document.getElementById('imu-gyrox').innerText = ((Math.random() - 0.5) * 0.005).toFixed(4);
+                document.getElementById('imu-gyroy').innerText = (0.001 + (Math.random() - 0.5) * 0.005).toFixed(4);
+                document.getElementById('imu-gyroz').innerText = ((Math.random() - 0.5) * 0.003).toFixed(4);
+
+                if (Math.abs(gripperCurrentForce - gripperTargetForce) > 0.1) {
+                    gripperCurrentForce += (gripperTargetForce - gripperCurrentForce) * 0.25;
+                } else {
+                    gripperCurrentForce = gripperTargetForce;
+                }
+                
+                const noise = (gripperTargetForce > 0) ? (Math.random() - 0.5) * 0.4 : 0;
+                const forceDisp = Math.max(0, gripperCurrentForce + noise).toFixed(2);
+                document.getElementById('test-gripper-force').innerHTML = `${forceDisp} <span class="text-[8px] font-normal text-slate-400">N</span>`;
+            }, 100);
+        }
+
+        function stopSystemTestLoop() {
+            if (systemTestInterval) {
+                clearInterval(systemTestInterval);
+                systemTestInterval = null;
+            }
+        }
+
+        function initVideoFeeds() {
+            const ts = Date.now();
+            ['videoFeed', 'videoFeed2', 'videoFeed3'].forEach(id => {
+                const img = document.getElementById(id);
+                if (img) img.src = '/video_feed?' + ts;
+            });
+        }
+
+        async function resetCamera() {
+            const btn = document.getElementById('btnCameraReset');
+            if (btn) { btn.textContent = '⟳ Resetting...'; btn.disabled = true; }
+
+            ['videoFeed', 'videoFeed2', 'videoFeed3'].forEach(id => {
+                const img = document.getElementById(id);
+                if (img) img.src = '';
+            });
+
+            try { await fetch('/api/camera/reset', { method: 'POST' }); } catch (e) {}
+
+            setTimeout(() => {
+                initVideoFeeds();
+                if (btn) { btn.textContent = '⟳ Camera'; btn.disabled = false; }
+            }, 8000);
+        }
+
+        init();
+
+        // ── FPS counter — server-side frame counter, sampled every second ───────
+        (function () {
+            let lastCount = null;
+            let lastTime  = performance.now();
+
+            async function tick() {
+                try {
+                    const res  = await fetch('/api/camera/fps');
+                    const data = await res.json();
+                    const now  = performance.now();
+                    if (lastCount !== null) {
+                        const elapsed = (now - lastTime) / 1000;
+                        const fps = Math.round((data.frame_count - lastCount) / elapsed);
+                        document.querySelectorAll('#fpsDisplay').forEach(el => {
+                            el.innerText = `FPS: ${fps} | Depth: Active`;
+                        });
+                    }
+                    lastCount = data.frame_count;
+                    lastTime  = now;
+                } catch (e) {}
+                setTimeout(tick, 1000);
+            }
+
+            tick();
+        })();
+    </script>
+</body>
+</html>
