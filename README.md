@@ -95,6 +95,18 @@ source /opt/ros/humble/setup.bash
 python3 yolo_node.py
 ```
 
+### รันบน laptop ด้วย webcam (ไม่มี RealSense)
+ทดสอบ detection บนโน้ตบุ๊กได้เลย — ไม่ต้องมีกล้อง RealSense หรือ depth:
+```bash
+# webcam ตัวแรก + บังคับ task โดยไม่ต้องมี state machine
+python3 yolo_node.py --ros-args \
+  -p camera:=webcam \                         # หรือ index: 0,1,...  / หรือ path วิดีโอ .mp4
+  -p force_state:=MEIHUA_FOREST_EXECUTION      # ดู cube; ใช้ WEAPON_CLUB / MARTIAL_ART_PLACEMENT ได้
+```
+> โหมดนี้ **ไม่มี depth** → `z_mm`/พิกัด mm เป็น `null`, แต่ pixel-error (task2),
+> grid occupancy (task3, ใช้ cube อย่างเดียว) และ overlay ยังทำงานครบ.
+> `pyrealsense2` ไม่จำเป็นต้องติดตั้งสำหรับโหมด webcam.
+
 ### ปรับค่าผ่าน ROS2 arguments
 ```bash
 python3 yolo_node.py --ros-args \
@@ -103,6 +115,8 @@ python3 yolo_node.py --ros-args \
   -p rotate:=270 \        # หมุนภาพตามการติดตั้งกล้อง (0/90/180/270)
   -p imgsz:=640 \
   -p conf:=0.5 \
+  -p camera:=realsense \  # realsense | webcam | 0,1.. (index) | path วิดีโอ
+  -p force_state:= \      # บังคับ macro_state (เว้นว่าง = ตาม /system_status)
   -p grid_use_depth:=true # task3 grid: ใช้ depth ยืนยันช่อง FULL ด้วย (default true)
 ```
 

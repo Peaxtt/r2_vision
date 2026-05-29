@@ -38,7 +38,11 @@ from std_msgs.msg import String
 
 import cv2
 import numpy as np
-import pyrealsense2 as rs
+
+try:
+    import pyrealsense2 as rs
+except ImportError:
+    rs = None   # laptop / webcam-only machine without RealSense SDK
 
 from model_loader import load_model
 from processors import WeaponProcessor, SimpleBestProcessor, GridProcessor
@@ -110,6 +114,13 @@ class VisionNode(Node):
         self.declare_parameter('imgsz',          640)
         self.declare_parameter('device',         'CPU')   # OpenVINO: CPU/GPU/AUTO
         self.declare_parameter('rotate',         0)        # 0/90/180/270 clockwise
+        # Camera source: 'realsense' (RGB-D), 'webcam'/'0'/'1'.. (laptop cam),
+        # or a path to a video file. webcam/video have NO depth → z/mm become
+        # null; pixel-error, grid occupancy and overlays still work.
+        self.declare_parameter('camera',         'realsense')
+        # Force a macro_state without /system_status (laptop/webcam testing).
+        # '' = follow ROS topic as normal. e.g. MEIHUA_FOREST_EXECUTION.
+        self.declare_parameter('force_state',     '')
         self.declare_parameter('target_weapon',  'spearhead')
         self.declare_parameter('target_meihua',  '')      # '' = ทุก class
         self.declare_parameter('grid_use_depth',  True)    # grid: depth-confirm cells
@@ -129,8 +140,9 @@ class VisionNode(Node):
         self._q: queue.Queue = queue.Queue(maxsize=1)
 
         # Display buffer (main thread reads this)
-        self._frame     = None
-        self._frame_lk  = threading.Lock()
+        self._frame       = None
+        self._frame_lk    = threading.Lock()
+        self._model_label = '—'    # persists between inference frames (no blink)
 
         # ONE active model
         self._model     = None
@@ -165,17 +177,20 @@ class VisionNode(Node):
         self.create_subscription(String, '/weapon_selection',
                                  self._on_weapon_sel, RELIABLE_QOS, callback_group=self._cb)
 
-        # RealSense
-        self._pipeline = rs.pipeline()
+        # Camera (RealSense or OpenCV webcam/video)
+        self._pipeline = None
         self._align    = None
+        self._cap      = None      # cv2.VideoCapture for webcam/video mode
+        self._has_depth = True
         self._init_camera()
 
         # Threads
         threading.Thread(target=self._cam_loop,   daemon=True, name='cam').start()
         threading.Thread(target=self._infer_loop, daemon=True, name='infer').start()
 
+        depth_str = 'RGB-D' if self._has_depth else 'RGB-only (no depth)'
         self.get_logger().info(
-            f'VisionNode ready | {self._w}x{self._h}@{self._fps}fps'
+            f'VisionNode ready | {self._w}x{self._h}@{self._fps}fps {depth_str}'
             f' | rotate={self._rotate}° | device={self.get_parameter("device").value}'
             f' | YOLO {YOLO_FPS}fps')
 
@@ -192,6 +207,18 @@ class VisionNode(Node):
     # ── Camera init ───────────────────────────────────────────────────────────
 
     def _init_camera(self):
+        src = str(self.get_parameter('camera').value).strip()
+        if src.lower() in ('', 'realsense', 'rs', 'd435', 'd455'):
+            self._init_realsense()
+        else:
+            self._init_opencv(src)
+
+    def _init_realsense(self):
+        if rs is None:
+            raise RuntimeError(
+                "camera='realsense' but pyrealsense2 is not installed. "
+                "Use -p camera:=webcam (or a device index) on a laptop.")
+        self._pipeline = rs.pipeline()
         cfg = rs.config()
         cfg.enable_stream(rs.stream.color, self._w, self._h, rs.format.bgr8, self._fps)
         cfg.enable_stream(rs.stream.depth, self._w, self._h, rs.format.z16,  self._fps)
@@ -200,11 +227,38 @@ class VisionNode(Node):
         intr = (self._pipeline.get_active_profile()
                 .get_stream(rs.stream.color)
                 .as_video_stream_profile().get_intrinsics())
+        self._has_depth = True
         self._fx, self._fy, self._ppx, self._ppy = rotate_intrinsics(
             intr.fx, intr.fy, intr.ppx, intr.ppy, self._w, self._h, self._rotate)
         self.get_logger().info(
-            f'Camera OK | rot intrinsics fx={self._fx:.1f} fy={self._fy:.1f} '
+            f'RealSense OK | rot intrinsics fx={self._fx:.1f} fy={self._fy:.1f} '
             f'cx={self._ppx:.1f} cy={self._ppy:.1f}')
+
+    def _init_opencv(self, src):
+        """Open a laptop webcam (index) or a video file. No depth available."""
+        target = int(src) if src.isdigit() else (0 if src.lower() == 'webcam' else src)
+        self._cap = cv2.VideoCapture(target)
+        if isinstance(target, int):
+            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._w)
+            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._h)
+            self._cap.set(cv2.CAP_PROP_FPS,          self._fps)
+        if not self._cap.isOpened():
+            raise RuntimeError(f"cannot open camera source: {src!r}")
+
+        # Use the actual frame size the device/file gives us.
+        self._w = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))  or self._w
+        self._h = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or self._h
+        self._has_depth = False
+
+        # No real intrinsics — approximate from a ~60° horizontal FOV so the
+        # principal point (used for pixel-error) is the image centre. mm/z stay
+        # null because depth is unavailable.
+        fx = fy = self._w / (2.0 * np.tan(np.radians(60.0) / 2.0))
+        self._fx, self._fy, self._ppx, self._ppy = rotate_intrinsics(
+            fx, fy, self._w / 2.0, self._h / 2.0, self._w, self._h, self._rotate)
+        self.get_logger().warn(
+            f'OpenCV camera ({src}) OK | {self._w}x{self._h} | NO DEPTH '
+            f'(z/mm will be null; pixel-error & grid still work)')
 
     def intr(self):
         """Rotated camera intrinsics (fx, fy, ppx, ppy) for the display frame."""
@@ -242,6 +296,12 @@ class VisionNode(Node):
     # ── Camera thread ─────────────────────────────────────────────────────────
 
     def _cam_loop(self):
+        if self._cap is not None:
+            self._cam_loop_opencv()
+        else:
+            self._cam_loop_realsense()
+
+    def _cam_loop_realsense(self):
         while self._running:
             try:
                 aligned = self._align.process(
@@ -252,15 +312,32 @@ class VisionNode(Node):
                     continue
                 color = np.asanyarray(cf.get_data())
                 depth = np.asanyarray(df.get_data())
-                try:
-                    self._q.put_nowait((color, depth))
-                except queue.Full:
-                    try: self._q.get_nowait()
-                    except queue.Empty: pass
-                    self._q.put_nowait((color, depth))
+                self._push(color, depth)
             except Exception as e:
                 self.get_logger().warn(f'cam: {e}')
                 time.sleep(0.1)
+
+    def _cam_loop_opencv(self):
+        # Zero depth map (uint16): depth lookups find no valid pixels → None.
+        zero_depth = np.zeros((self._h, self._w), dtype=np.uint16)
+        delay = 1.0 / max(1, self._fps)
+        while self._running:
+            ok, color = self._cap.read()
+            if not ok:
+                # End of video file → loop; webcam hiccup → brief wait.
+                self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                time.sleep(0.05)
+                continue
+            self._push(color, zero_depth)
+            time.sleep(delay)   # pace to ~cam_fps (webcam read is blocking anyway)
+
+    def _push(self, color, depth):
+        try:
+            self._q.put_nowait((color, depth))
+        except queue.Full:
+            try: self._q.get_nowait()
+            except queue.Empty: pass
+            self._q.put_nowait((color, depth))
 
     # ── Inference thread ──────────────────────────────────────────────────────
 
@@ -280,16 +357,20 @@ class VisionNode(Node):
 
             with self._lock:
                 state = self._state
+            forced = self.get_parameter('force_state').value
+            if forced:
+                state = forced
 
-            display = color.copy()
             now     = time.time()
             do_yolo = state != 'IDLE' and (now - last_t >= interval)
 
-            model_file = '—'
             if do_yolo:
-                last_t = now
-                proc = self._procs.get(state)
-                model = self._get_model(STATE_MODEL.get(state))
+                # Inference frame: annotate fresh and publish it as the display.
+                last_t  = now
+                display = color.copy()
+                task    = self._resolve_state(state)   # WEAPON_CLUB_SETUP → WEAPON_CLUB
+                proc    = self._procs.get(task)
+                model   = self._get_model(STATE_MODEL.get(task))
                 if proc is not None and model is not None:
                     conf   = self.get_parameter('conf').value
                     imgsz  = self.get_parameter('imgsz').value
@@ -297,18 +378,42 @@ class VisionNode(Node):
                     results = model.predict(color, imgsz=imgsz, conf=conf,
                                             device=device, verbose=False)
                     proc.process(results, color, depth, display, self.intr())
-                    model_file = os.path.basename(
-                        self.get_parameter(STATE_MODEL[state]).value)
+                    self._model_label = os.path.basename(
+                        self.get_parameter(STATE_MODEL[task]).value)
                 else:
-                    model_file = 'no model (abstract)'
+                    self._model_label = 'no model (abstract)'
+                self._draw_hud(display, state)
+                with self._frame_lk:
+                    self._frame = display
+            elif state == 'IDLE':
+                # Idle: stream live video (no detections to preserve).
+                self._model_label = '—'
+                display = color.copy()
+                self._draw_hud(display, state)
+                with self._frame_lk:
+                    self._frame = display
+            # else: between inferences in an active state → keep the last
+            # annotated frame so boxes + label stay on screen (no flicker).
 
-            # HUD
-            cv2.putText(display, f'STATE: {state}  MODEL: {model_file}',
-                        (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
-            cv2.drawMarker(display, (int(self._ppx), int(self._ppy)),
-                           (80, 80, 80), cv2.MARKER_CROSS, 20, 1)
-            with self._frame_lk:
-                self._frame = display
+    def _resolve_state(self, state):
+        """Map a macro_state to a known task key.
+
+        Exact match wins; otherwise a prefix match, so finer sub-states from
+        the state machine (e.g. WEAPON_CLUB_SETUP, WEAPON_CLUB_AIM) still drive
+        the right task instead of falling through to 'no model (abstract)'.
+        """
+        if state in self._procs:
+            return state
+        for key in self._procs:
+            if state.startswith(key):
+                return key
+        return state
+
+    def _draw_hud(self, display, state):
+        cv2.putText(display, f'STATE: {state}  MODEL: {self._model_label}',
+                    (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
+        cv2.drawMarker(display, (int(self._ppx), int(self._ppy)),
+                       (80, 80, 80), cv2.MARKER_CROSS, 20, 1)
 
     # ── Model management ──────────────────────────────────────────────────────
 
@@ -334,8 +439,16 @@ class VisionNode(Node):
 
     def destroy_node(self):
         self._running = False
-        try: self._pipeline.stop()
-        except: pass
+        try:
+            if self._pipeline is not None:
+                self._pipeline.stop()
+        except Exception:
+            pass
+        try:
+            if self._cap is not None:
+                self._cap.release()
+        except Exception:
+            pass
         super().destroy_node()
 
 
