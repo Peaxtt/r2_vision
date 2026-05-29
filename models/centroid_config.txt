@@ -1,0 +1,13 @@
+max_depth_mm=3399
+max_bbox_area_pct=10.34
+horiz_align_pct=15.76
+seg_depth_dev_pct=34.98
+depth_tol_mm=246
+weapondetect_cent_x=49.75
+weapondetect_cent_y=51.72
+fist_cent_x=49.26
+fist_cent_y=73.40
+hand_cent_x=33.00
+hand_cent_y=63.05
+spearhead_cent_x=53.20
+spearhead_cent_y=89.16

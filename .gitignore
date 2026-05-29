@@ -2,4 +2,5 @@ __pycache__/
 *.pyc
 models/*.pt
 models/*.onnx
+models/*.engine
 *.log
