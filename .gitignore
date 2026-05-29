@@ -8,3 +8,7 @@ models/*.engine
 ui/__pycache__/
 ui/api/__pycache__/
 ui/core/__pycache__/
+weapon_detection/
+Miniconda3-latest-Linux-x86_64.sh
+detections.json
+capture_*.png

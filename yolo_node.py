@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
 """
 YOLO Detection ROS2 Node — ABU Robocon 2026 R2
-กล้อง + YOLO + OpenCV window + ROS2 publisher
+กล้อง + OpenVINO YOLO + OpenCV window + ROS2 publisher
+
+Each macro_state runs its OWN processing pipeline (see processors.py):
+  WEAPON_CLUB              → WeaponProcessor   (full OpenVINO weapon pipeline,
+                             mm coords + placement index, JSON output)
+  MEIHUA_FOREST_EXECUTION  → SimpleBestProcessor (pixel-error PoseStamped)
+  MARTIAL_ART_PLACEMENT    → AbstractProcessor (no model yet — placeholder)
 
 Publishes:
-  /vision/task1_target  PoseStamped  BEST_EFFORT  pixel error + depth (mm)
-  /vision/task2_target  PoseStamped  BEST_EFFORT
-  /vision/task3_target  PoseStamped  BEST_EFFORT
+  /vision/task1_target  String JSON  BEST_EFFORT  weapon detections (mm + index)
+  /vision/task2_target  PoseStamped  BEST_EFFORT  pixel error + depth (mm)
+  /vision/task3_target  —            (abstract, no model)
 
 Subscribes:
   /system_status    String JSON  BEST_EFFORT  macro_state → switch model
   /weapon_selection String JSON  RELIABLE     runtime class switch (fallback)
 
 Display: OpenCV window บน main thread (ไม่ค้าง)
-Model:   ONE model loaded at a time (unload เก่าก่อน load ใหม่)
+Models:  ONE OpenVINO model loaded at a time (unload เก่าก่อน load ใหม่)
 """
 
 import gc
@@ -29,12 +35,13 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from std_msgs.msg import String
-from geometry_msgs.msg import PoseStamped
 
 import cv2
 import numpy as np
 import pyrealsense2 as rs
-from ultralytics import YOLO
+
+from model_loader import load_model
+from processors import WeaponProcessor, SimpleBestProcessor, AbstractProcessor
 
 # ── QoS ───────────────────────────────────────────────────────────────────────
 RT_QOS = QoSProfile(
@@ -44,46 +51,47 @@ RELIABLE_QOS = QoSProfile(
     reliability=ReliabilityPolicy.RELIABLE,
     history=HistoryPolicy.KEEP_LAST, depth=10)
 
-# ── State → model/topic mapping ───────────────────────────────────────────────
+# ── State → model parameter key ───────────────────────────────────────────────
 STATE_MODEL = {
     'WEAPON_CLUB':             'model_weapon',
     'MEIHUA_FOREST_EXECUTION': 'model_meihua',
     'MARTIAL_ART_PLACEMENT':   'model_martial',
 }
-STATE_TOPIC = {
-    'WEAPON_CLUB':             '/vision/task1_target',
-    'MEIHUA_FOREST_EXECUTION': '/vision/task2_target',
-    'MARTIAL_ART_PLACEMENT':   '/vision/task3_target',
-}
-
-# ── Centroid offset ต่อ class (cx%, cy% ของ bbox) ────────────────────────────
-CENTROID = {
-    'spearhead':  (0.532, 0.892),
-    'fist':       (0.493, 0.734),
-    'hand':       (0.330, 0.631),
-    'blue_cube':  (0.500, 0.500),
-    'red_cube':   (0.500, 0.500),
-}
-
-COLORS = {
-    'spearhead':  (0,   165, 255),
-    'fist':       (0,   255,   0),
-    'hand':       (255,   0,   0),
-    'blue_cube':  (255, 100,   0),
-    'red_cube':   (0,    50, 255),
-}
 
 # ── Model paths (เปลี่ยนตรงนี้เมื่อ pull model ใหม่) ─────────────────────────
-MODELS_DIR = os.path.join(os.path.dirname(__file__), 'models')
-MODEL_WEAPON  = os.path.join(MODELS_DIR, 'weapon.onnx')
+HERE       = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(HERE, 'models')
+# Weapon: pre-converted OpenVINO IR, committed under models/.
+MODEL_WEAPON  = os.path.join(MODELS_DIR, 'yolonew_openvino_model')
+# Others: .pt/.onnx are auto-exported to OpenVINO IR on first load (cached).
 MODEL_MEIHUA  = os.path.join(MODELS_DIR, 'cube.pt')
 MODEL_MARTIAL = os.path.join(MODELS_DIR, 'martial.pt')
+CENTROID_CFG  = os.path.join(MODELS_DIR, 'centroid_config.txt')
 
 YOLO_FPS   = 5    # YOLO inference rate cap
 CAM_W      = 848
 CAM_H      = 480
 CAM_FPS    = 30
 WIN_NAME   = 'R2 Vision — Q to quit'
+
+
+# ── Rotation helpers ──────────────────────────────────────────────────────────
+
+def rotate_frame(frame, deg):
+    deg = int(deg) % 360
+    if deg == 0:   return frame
+    if deg == 90:  return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+    if deg == 180: return cv2.rotate(frame, cv2.ROTATE_180)
+    if deg == 270: return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return frame
+
+
+def rotate_intrinsics(fx, fy, ppx, ppy, W, H, deg):
+    deg = int(deg) % 360
+    if deg == 90:  return fy, fx, H - 1 - ppy, ppx
+    if deg == 180: return fx, fy, W - 1 - ppx, H - 1 - ppy
+    if deg == 270: return fy, fx, ppy, W - 1 - ppx
+    return fx, fy, ppx, ppy
 
 
 class VisionNode(Node):
@@ -93,10 +101,14 @@ class VisionNode(Node):
         self._cb = ReentrantCallbackGroup()
 
         # Parameters (override via --ros-args -p)
-        self.declare_parameter('model_weapon',  MODEL_WEAPON)
-        self.declare_parameter('model_meihua',  MODEL_MEIHUA)
-        self.declare_parameter('model_martial', MODEL_MARTIAL)
+        self.declare_parameter('model_weapon',   MODEL_WEAPON)
+        self.declare_parameter('model_meihua',   MODEL_MEIHUA)
+        self.declare_parameter('model_martial',  MODEL_MARTIAL)
+        self.declare_parameter('centroid_config', CENTROID_CFG)
         self.declare_parameter('conf',           0.50)
+        self.declare_parameter('imgsz',          640)
+        self.declare_parameter('device',         'CPU')   # OpenVINO: CPU/GPU/AUTO
+        self.declare_parameter('rotate',         0)        # 0/90/180/270 clockwise
         self.declare_parameter('target_weapon',  'spearhead')
         self.declare_parameter('target_meihua',  '')      # '' = ทุก class
         self.declare_parameter('cam_width',      CAM_W)
@@ -109,6 +121,7 @@ class VisionNode(Node):
         self._tgt_cls = self.get_parameter('target_weapon').value
         self._lock    = threading.Lock()
         self._running = True
+        self._rotate  = int(self.get_parameter('rotate').value)
 
         # Camera queue
         self._q: queue.Queue = queue.Queue(maxsize=1)
@@ -122,15 +135,27 @@ class VisionNode(Node):
         self._model_key = ''
         self._model_lk  = threading.Lock()
 
-        # Publishers cache
+        # Publishers cache (topic → publisher)
         self._pubs: dict = {}
 
         # Camera params
         self._w   = self.get_parameter('cam_width').value
         self._h   = self.get_parameter('cam_height').value
         self._fps = self.get_parameter('cam_fps').value
+        self._fx = self._fy = 0.0
         self._ppx = self._w / 2.0
         self._ppy = self._h / 2.0
+
+        # Per-state processors — each interprets its model's output its own way.
+        self._procs = {
+            'WEAPON_CLUB': WeaponProcessor(
+                self, 'WEAPON_CLUB', '/vision/task1_target'),
+            'MEIHUA_FOREST_EXECUTION': SimpleBestProcessor(
+                self, 'MEIHUA_FOREST_EXECUTION', '/vision/task2_target',
+                'target_meihua'),
+            'MARTIAL_ART_PLACEMENT': AbstractProcessor(
+                self, 'MARTIAL_ART_PLACEMENT'),
+        }
 
         # Subscribers
         self.create_subscription(String, '/system_status',
@@ -149,7 +174,18 @@ class VisionNode(Node):
 
         self.get_logger().info(
             f'VisionNode ready | {self._w}x{self._h}@{self._fps}fps'
-            f' | YOLO {YOLO_FPS}fps | models dir: {MODELS_DIR}')
+            f' | rotate={self._rotate}° | device={self.get_parameter("device").value}'
+            f' | YOLO {YOLO_FPS}fps')
+
+    # ── Display geometry (after rotation) ───────────────────────────────────────
+
+    @property
+    def disp_w(self):
+        return self._h if self._rotate in (90, 270) else self._w
+
+    @property
+    def disp_h(self):
+        return self._w if self._rotate in (90, 270) else self._h
 
     # ── Camera init ───────────────────────────────────────────────────────────
 
@@ -162,9 +198,23 @@ class VisionNode(Node):
         intr = (self._pipeline.get_active_profile()
                 .get_stream(rs.stream.color)
                 .as_video_stream_profile().get_intrinsics())
-        self._ppx, self._ppy = intr.ppx, intr.ppy
+        self._fx, self._fy, self._ppx, self._ppy = rotate_intrinsics(
+            intr.fx, intr.fy, intr.ppx, intr.ppy, self._w, self._h, self._rotate)
         self.get_logger().info(
-            f'Camera OK | principal=({self._ppx:.1f},{self._ppy:.1f})')
+            f'Camera OK | rot intrinsics fx={self._fx:.1f} fy={self._fy:.1f} '
+            f'cx={self._ppx:.1f} cy={self._ppy:.1f}')
+
+    def intr(self):
+        """Rotated camera intrinsics (fx, fy, ppx, ppy) for the display frame."""
+        return (self._fx, self._fy, self._ppx, self._ppy)
+
+    # ── Publisher cache ─────────────────────────────────────────────────────────
+
+    def get_publisher(self, topic, msg_type, reliable=False):
+        if topic not in self._pubs:
+            qos = RELIABLE_QOS if reliable else RT_QOS
+            self._pubs[topic] = self.create_publisher(msg_type, topic, qos)
+        return self._pubs[topic]
 
     # ── Subscribers ───────────────────────────────────────────────────────────
 
@@ -222,50 +272,35 @@ class VisionNode(Node):
             except queue.Empty:
                 continue
 
+            # Apply physical camera rotation once, up front.
+            color = rotate_frame(color, self._rotate)
+            depth = rotate_frame(depth, self._rotate)
+
             with self._lock:
-                state   = self._state
-                tgt_cls = self._tgt_cls
+                state = self._state
 
             display = color.copy()
             now     = time.time()
             do_yolo = state != 'IDLE' and (now - last_t >= interval)
 
+            model_file = '—'
             if do_yolo:
                 last_t = now
-                model  = self._get_model(STATE_MODEL.get(state))
-                if model:
-                    conf    = self.get_parameter('conf').value
-                    results = model(color, conf=conf, verbose=False)
-                    tc      = tgt_cls if state == 'WEAPON_CLUB' else \
-                              (self.get_parameter('target_meihua').value or None)
-                    best    = self._pick_best(results, tc)
-
-                    if best:
-                        x1, y1, x2, y2, cls_name = best
-                        cx_p, cy_p = CENTROID.get(cls_name, (0.5, 0.5))
-                        scx = int(np.clip(x1 + (x2-x1)*cx_p, 0, self._w-1))
-                        scy = int(np.clip(y1 + (y2-y1)*cy_p, 0, self._h-1))
-                        pad = depth[max(0,scy-3):min(self._h,scy+4),
-                                    max(0,scx-3):min(self._w,scx+4)]
-                        md  = self.get_parameter('max_depth_mm').value
-                        val = pad[(pad > 0) & (pad <= md)]
-                        d_mm = float(np.median(val)) if val.size > 0 else 0.0
-                        x_err = float(scx - self._ppx)
-                        y_err = float(scy - self._ppy)
-                        self._pub(state, x_err, y_err, d_mm)
-                        col = COLORS.get(cls_name, (0, 255, 0))
-                        cv2.rectangle(display, (x1, y1), (x2, y2), col, 2)
-                        cv2.drawMarker(display, (scx, scy),
-                                       (0, 255, 255), cv2.MARKER_CROSS, 18, 2)
-                        cv2.putText(display,
-                                    f'{cls_name} x={x_err:.0f}px z={d_mm:.0f}mm',
-                                    (x1, max(y1-8, 14)),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, col, 2)
+                proc = self._procs.get(state)
+                model = self._get_model(STATE_MODEL.get(state))
+                if proc is not None and model is not None:
+                    conf   = self.get_parameter('conf').value
+                    imgsz  = self.get_parameter('imgsz').value
+                    device = self.get_parameter('device').value
+                    results = model.predict(color, imgsz=imgsz, conf=conf,
+                                            device=device, verbose=False)
+                    proc.process(results, color, depth, display, self.intr())
+                    model_file = os.path.basename(
+                        self.get_parameter(STATE_MODEL[state]).value)
+                else:
+                    model_file = 'no model (abstract)'
 
             # HUD
-            model_file = os.path.basename(
-                self.get_parameter(STATE_MODEL.get(state,'model_weapon')).value
-            ) if state != 'IDLE' else '—'
             cv2.putText(display, f'STATE: {state}  MODEL: {model_file}',
                         (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
             cv2.drawMarker(display, (int(self._ppx), int(self._ppy)),
@@ -287,47 +322,13 @@ class VisionNode(Node):
                 self._model = None
                 gc.collect()
             path = self.get_parameter(key).value
-            if not path or not os.path.exists(path):
-                self.get_logger().warn(f'Model not found: {path}')
+            model = load_model(path, log=self.get_logger().info)
+            if model is None:
+                self.get_logger().warn(f'Model not found / abstract: {path}')
                 return None
-            self.get_logger().info(f'Loading {os.path.basename(path)}')
-            self._model     = YOLO(path)
+            self._model     = model
             self._model_key = key
             return self._model
-
-    # ── Pick best detection ───────────────────────────────────────────────────
-
-    def _pick_best(self, results, target_cls):
-        best_conf, best_box = -1.0, None
-        for r in results:
-            if not r.boxes:
-                continue
-            for box in r.boxes:
-                conf = float(box.conf[0])
-                name = r.names.get(int(box.cls[0]), '')
-                if target_cls and name != target_cls:
-                    continue
-                if conf > best_conf:
-                    best_conf = conf
-                    x = box.xyxy[0].cpu().numpy().astype(int)
-                    best_box = (x[0], x[1], x[2], x[3], name)
-        return best_box
-
-    # ── Publisher ─────────────────────────────────────────────────────────────
-
-    def _pub(self, state, x_err, y_err, depth_mm):
-        topic = STATE_TOPIC.get(state)
-        if not topic:
-            return
-        if topic not in self._pubs:
-            self._pubs[topic] = self.create_publisher(PoseStamped, topic, RT_QOS)
-        msg = PoseStamped()
-        msg.header.stamp    = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'base_link'
-        msg.pose.position.x = x_err
-        msg.pose.position.y = y_err
-        msg.pose.position.z = depth_mm
-        self._pubs[topic].publish(msg)
 
     def destroy_node(self):
         self._running = False
@@ -345,7 +346,7 @@ def main(args=None):
     threading.Thread(target=executor.spin, daemon=True).start()
 
     cv2.namedWindow(WIN_NAME, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(WIN_NAME, node._w, node._h)
+    cv2.resizeWindow(WIN_NAME, node.disp_w, node.disp_h)
 
     try:
         while node._running:
