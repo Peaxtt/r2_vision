@@ -1827,11 +1827,18 @@
             }
         }
 
+        // MJPEG stream is served by yolo_node.py on this port (not Flask),
+        // using the same hostname the page was opened with (localhost / iPad).
+        const STREAM_PORT = 8080;
+        function streamURL() {
+            return `${location.protocol}//${location.hostname}:${STREAM_PORT}/video_feed`;
+        }
         function initVideoFeeds() {
+            const base = streamURL();
             const ts = Date.now();
             ['videoFeed', 'videoFeed2', 'videoFeed3'].forEach(id => {
                 const img = document.getElementById(id);
-                if (img) img.src = '/video_feed?' + ts;
+                if (img) img.src = base + '?' + ts;
             });
         }
 

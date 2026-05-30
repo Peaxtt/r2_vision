@@ -28,6 +28,7 @@ import os
 import queue
 import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import rclpy
 from rclpy.node import Node
@@ -73,11 +74,60 @@ MODEL_MEIHUA  = os.path.join(MODELS_DIR, 'cube_openvino_model')
 MODEL_MARTIAL = os.path.join(MODELS_DIR, 'cube_openvino_model')
 CENTROID_CFG  = os.path.join(MODELS_DIR, 'centroid_config.txt')
 
-YOLO_FPS   = 5    # YOLO inference rate cap
-CAM_W      = 848
-CAM_H      = 480
-CAM_FPS    = 30
-WIN_NAME   = 'R2 Vision — Q to quit'
+YOLO_FPS    = 5    # YOLO inference rate cap
+CAM_W       = 848
+CAM_H       = 480
+CAM_FPS     = 30
+WIN_NAME    = 'R2 Vision — Q to quit'
+STREAM_FPS  = 15   # MJPEG stream rate to the Flask UI
+STREAM_PORT = 8080 # MJPEG stream port (UI <img> points here)
+
+
+# ── MJPEG stream server (serves the annotated display to the web UI) ──────────
+
+def make_mjpeg_server(node, host, port):
+    """Tiny multipart/x-mixed-replace server that streams node._frame as JPEG.
+
+    The same annotated frame shown in the OpenCV window (detections + HUD) is
+    served to the Flask UI, so the UI shows whatever the node sees — including
+    webcam mode, since it is just node._frame.
+    """
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass  # silence per-request logging
+
+        def do_GET(self):
+            if self.path.split('?')[0] not in ('/', '/video_feed', '/stream'):
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header('Cache-Control', 'no-cache, private')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Content-Type',
+                             'multipart/x-mixed-replace; boundary=frame')
+            self.end_headers()
+            interval = 1.0 / STREAM_FPS
+            try:
+                while node._running:
+                    with node._frame_lk:
+                        frame = node._frame
+                    if frame is None:
+                        time.sleep(0.05)
+                        continue
+                    ok, jpg = cv2.imencode(
+                        '.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                    if not ok:
+                        continue
+                    self.wfile.write(b'--frame\r\n')
+                    self.wfile.write(b'Content-Type: image/jpeg\r\n')
+                    self.wfile.write(f'Content-Length: {len(jpg)}\r\n\r\n'.encode())
+                    self.wfile.write(jpg.tobytes())
+                    self.wfile.write(b'\r\n')
+                    time.sleep(interval)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # client (browser tab) closed — normal
+
+    return ThreadingHTTPServer((host, port), Handler)
 
 
 # ── Rotation helpers ──────────────────────────────────────────────────────────
@@ -121,6 +171,10 @@ class VisionNode(Node):
         # Force a macro_state without /system_status (laptop/webcam testing).
         # '' = follow ROS topic as normal. e.g. MEIHUA_FOREST_EXECUTION.
         self.declare_parameter('force_state',     '')
+        # MJPEG stream → Flask UI (annotated frame). The UI <img> reads
+        # http://<host>:<stream_port>/video_feed.
+        self.declare_parameter('stream',          True)
+        self.declare_parameter('stream_port',     STREAM_PORT)
         self.declare_parameter('target_weapon',  'spearhead')
         self.declare_parameter('target_meihua',  '')      # '' = ทุก class
         self.declare_parameter('grid_use_depth',  True)    # grid: depth-confirm cells
@@ -187,6 +241,19 @@ class VisionNode(Node):
         # Threads
         threading.Thread(target=self._cam_loop,   daemon=True, name='cam').start()
         threading.Thread(target=self._infer_loop, daemon=True, name='infer').start()
+
+        # MJPEG stream server for the web UI
+        self._mjpeg = None
+        if self.get_parameter('stream').value:
+            port = int(self.get_parameter('stream_port').value)
+            try:
+                self._mjpeg = make_mjpeg_server(self, '0.0.0.0', port)
+                threading.Thread(target=self._mjpeg.serve_forever,
+                                 daemon=True, name='mjpeg').start()
+                self.get_logger().info(
+                    f'MJPEG stream ready → http://<this-host>:{port}/video_feed')
+            except OSError as e:
+                self.get_logger().warn(f'MJPEG stream disabled ({port} in use?): {e}')
 
         depth_str = 'RGB-D' if self._has_depth else 'RGB-only (no depth)'
         self.get_logger().info(
@@ -439,6 +506,11 @@ class VisionNode(Node):
 
     def destroy_node(self):
         self._running = False
+        try:
+            if self._mjpeg is not None:
+                self._mjpeg.shutdown()
+        except Exception:
+            pass
         try:
             if self._pipeline is not None:
                 self._pipeline.stop()

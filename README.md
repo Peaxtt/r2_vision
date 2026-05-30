@@ -60,24 +60,30 @@ source /opt/ros/humble/setup.bash
 
 > ทุกคำสั่งของ ROS node ต้อง `source /opt/ros/humble/setup.bash` ก่อน
 
-### ทดสอบบน laptop ด้วย webcam (ไม่มี RealSense / ไม่มี depth)
+### ทดสอบเร็ว (default = WEAPON_CLUB)
 ```bash
-# Task 1 — weapon (spearhead / fist / hand)
-python3 yolo_node.py --ros-args -p camera:=webcam -p force_state:=WEAPON_CLUB
+# ไม่มี RealSense — laptop webcam
+python3 yolo_node.py --ros-args -p camera:=webcam   -p force_state:=WEAPON_CLUB
 
+# มี RealSense
+python3 yolo_node.py --ros-args -p camera:=realsense -p force_state:=WEAPON_CLUB
+```
+
+### ทดสอบ task อื่น (webcam / ไม่มี depth)
+```bash
 # Task 2 — cube ใน forest
 python3 yolo_node.py --ros-args -p camera:=webcam -p force_state:=MEIHUA_FOREST_EXECUTION
-
 # Task 3 — 3×3 grid occupancy (arena)
 python3 yolo_node.py --ros-args -p camera:=webcam -p force_state:=MARTIAL_ART_PLACEMENT
-
-# เลือก webcam ตัวอื่น (index 1) หรือเล่นจากไฟล์วิดีโอ
-python3 yolo_node.py --ros-args -p camera:=1            -p force_state:=WEAPON_CLUB
-python3 yolo_node.py --ros-args -p camera:=clip.mp4     -p force_state:=MARTIAL_ART_PLACEMENT
+# เลือก webcam index อื่น หรือเล่นจากไฟล์วิดีโอ
+python3 yolo_node.py --ros-args -p camera:=1        -p force_state:=WEAPON_CLUB
+python3 yolo_node.py --ros-args -p camera:=clip.mp4 -p force_state:=WEAPON_CLUB
 ```
 
 ### รันบนหุ่น (RealSense, ตาม state machine จริง)
 ```bash
+cd ~/FIBOX/r2_vision
+
 # Terminal 1 — Flask UI (เปิด http://localhost:5000)
 ./start_abu_vision.sh
 
@@ -127,8 +133,24 @@ ros2 topic list | grep vision
 | `conf` | `0.50` | confidence threshold |
 | `grid_use_depth` | `true` | task3: ใช้ depth ยืนยันช่อง FULL |
 | `target_meihua` | `''` | กรอง class ใน forest (`blue_cube`/`red_cube`/`''`=ทุก class) |
+| `stream` | `true` | เปิด MJPEG stream ให้ UI (กล้องโชว์ในเว็บ) |
+| `stream_port` | `8080` | port ของ MJPEG stream |
 
 > กด `Q` หรือ `ESC` ในหน้าต่าง OpenCV เพื่อออก
+
+### กล้องในหน้าเว็บ UI
+`yolo_node.py` สตรีมภาพ (พร้อม overlay detection) เป็น **MJPEG** ที่
+`http://<host>:8080/video_feed` — หน้าเว็บ UI ดึงภาพจาก port นี้โดยตรง
+(ไม่ผ่าน Flask) จึงโชว์สิ่งที่ node เห็น รวมถึงโหมด **webcam** ด้วย.
+```bash
+# ต้องรัน yolo_node ก่อน UI ถึงจะเห็นกล้องในเว็บ
+python3 yolo_node.py --ros-args -p camera:=webcam -p force_state:=MARTIAL_ART_PLACEMENT
+./start_abu_vision.sh        # เปิด http://localhost:5000 → เห็นภาพกล้อง
+# เปิดสตรีมตรงๆ ก็ได้:  http://localhost:8080/video_feed
+# ปิดสตรีม:  -p stream:=false
+```
+> ถ้าในเว็บขึ้น "WAITING FOR STREAM" = ยังไม่ได้รัน `yolo_node.py` (หรือ `stream:=false`,
+> หรือ port 8080 ถูกใช้/บล็อก).
 
 ---
 
@@ -358,18 +380,18 @@ python3 vision_bridge_node.py
 
 ```bash
 # Terminal 1 — Flask UI
-cd ~/vision/R2-ABU && ./start_abu_vision.sh
+cd ~/FIBOX/r2_vision && ./start_abu_vision.sh
 
-# Terminal 2 — YOLO node (เจ้าของกล้อง)
+# Terminal 2 — YOLO node (เจ้าของกล้อง) — ตาม state machine จริง ไม่ต้อง force_state
 source /opt/ros/humble/setup.bash
-python3 ~/r2_vision/yolo_node.py
+python3 ~/FIBOX/r2_vision/yolo_node.py --ros-args -p rotate:=270
 
 # Terminal 3 — Vision Bridge
 source /opt/ros/humble/setup.bash
-python3 ~/r2_vision/vision_bridge_node.py
+python3 ~/FIBOX/r2_vision/vision_bridge_node.py
 
 # ปิดทุกอย่าง
-cd ~/vision/R2-ABU && ./stop_all.sh
+cd ~/FIBOX/r2_vision && ./stop_all.sh
 ```
 
 **Flask UI เปิดที่:** `http://localhost:5000` หรือ `http://<IP>:5000`

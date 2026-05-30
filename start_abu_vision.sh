@@ -23,7 +23,7 @@ echo ""
 if [ -f "$PID_FILE" ] && kill -0 "$(cat $PID_FILE)" 2>/dev/null; then
     echo "  [!] Already running — PID $(cat $PID_FILE)"
     echo "  [i] Open  : http://$IP:5000"
-    echo "  [i] Stop  : ./stop.sh"
+    echo "  [i] Stop  : ./stop_all.sh"
     echo ""
     exit 0
 fi
@@ -44,7 +44,7 @@ if kill -0 "$(cat $PID_FILE)" 2>/dev/null; then
     echo ""
     echo "  ดู Flask log : tail -f $LOG_FILE"
     echo "  ดู App log   : tail -f /tmp/abu_vision.log"
-    echo "  ปิด server   : ./stop.sh"
+    echo "  ปิด server   : ./stop_all.sh"
 else
     echo "  [✗] Failed to start — ดู log:"
     echo "      cat $LOG_FILE"

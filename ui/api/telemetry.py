@@ -1,6 +1,11 @@
 """
-Flask camera telemetry — video feed removed.
-Camera display is handled by yolo_detection_node OpenCV window.
+Flask camera telemetry.
+
+The live video is NOT served by Flask — yolo_node.py streams its annotated
+frames over MJPEG on http://<host>:8080/video_feed, and the UI <img> points
+straight at it (see index.html streamURL()). This keeps a single camera owner
+(yolo_node) and works for webcam/RealSense alike. These endpoints are just
+small status/diagnostic stubs.
 """
 import threading
 from flask import Blueprint, jsonify
